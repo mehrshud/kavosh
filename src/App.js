@@ -575,9 +575,11 @@ class APIService {
   constructor() {
     this.apiKeys = {
       instagram: "YOUR_INSTAGRAM_TOKEN",
-      twitter: "YOUR_TWITTER_BEARER_TOKEN",
-      openai: "YOUR_OPENAI_API_KEY",
-      gemini: "YOUR_GEMINI_API_KEY",
+      twitter:
+        "AAAAAAAAAAAAAAAAAAAAANes3QEAAAAAseonNSQcSJS9AniPwjzPiCoHHOI%3DjCsh0wvz6sVZHjLqYqERMaxLrWF0XYxWxkBvH1RTLI5q8u6C8u",
+      openai:
+        "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",
+      gemini: "AIzaSyDSE3yS1BjYQ41O79SjK0cG6pEQarMLihE",
     };
   }
 

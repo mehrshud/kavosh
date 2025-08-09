@@ -1,508 +1,187 @@
-import React, { useState, useEffect } from "react";
-import {
-  BrowserRouter as Router,
-  Routes,
-  Route,
-  Navigate,
-  useNavigate,
-} from "react-router-dom";
+import React, {
+  useState,
+  useEffect,
+  createContext,
+  useContext,
+  useRef,
+} from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
-  Filter,
-  Calendar,
   Instagram,
   Twitter,
   Facebook,
-  MessageCircle,
   Send,
-  Users,
-  Settings,
+  MessageCircle,
+  MessageSquare,
   LogOut,
-  Eye,
-  EyeOff,
-  Zap,
+  Calendar,
+  Filter,
   TrendingUp,
+  Bot,
+  CheckCircle,
   BarChart3,
   Globe,
-  Star,
-  Clock,
-  Download,
-  Share2,
-  Heart,
-  MessageSquare,
-  Repeat2,
-  Bookmark,
-  ExternalLink,
-  ChevronDown,
-  Bot,
-  Coins,
-  AlertCircle,
-  CheckCircle,
-  RefreshCw,
-  UserPlus,
-  UserCheck,
-  MoreHorizontal,
+  FileText,
   Image,
   Video,
-  FileText,
   Link,
+  MoreHorizontal,
+  Zap,
   Sparkles,
+  Download,
+  Share2,
+  Bookmark,
+  ExternalLink,
+  Heart,
+  Repeat2,
+  RefreshCw,
+  Coins,
+  Star,
+  ChevronDown,
+  AlertCircle,
+  Clock,
 } from "lucide-react";
-import "./styles/globals.css";
 
-// Firebase Configuration
-// IMPORTANT: In a real application, use environment variables
-// For this example, we'll use placeholder values.
-import { initializeApp } from "firebase/app";
-import {
-  getAuth,
-  signInWithEmailAndPassword,
-  signOut,
-  onAuthStateChanged,
-  GoogleAuthProvider,
-  signInWithPopup,
-} from "firebase/auth";
-import { getFirestore, doc, setDoc, getDoc } from "firebase/firestore";
-
-const firebaseConfig = {
-  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
-  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.REACT_APP_FIREBASE_APP_ID,
-  measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID,
-};
-
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const googleProvider = new GoogleAuthProvider();
-
-// API Configuration
-const API_CONFIG = {
-  instagram: {
-    baseUrl: "https://graph.instagram.com/v18.0",
+// --- Mock API Service ---
+// In a real application, this would make actual HTTP requests to your backend.
+const apiService = {
+  testConnection: async () => {
+    // Simulate network delay and possible failure
+    await new Promise((res) => setTimeout(res, 500));
+    return Math.random() > 0.1; // 90% chance of success
   },
-  twitter: {
-    baseUrl: "https://api.twitter.com/2",
+  getMockResults: (platform, query, count) => {
+    const results = [];
+    const sentiments = ["positive", "neutral", "negative"];
+    const authors = [
+      "خبرگزاری فارس",
+      "کاربر فعال",
+      "تحلیلگر سیاسی",
+      "صفحه رسمی",
+      "بلاگر معروف",
+    ];
+    for (let i = 0; i < count; i++) {
+      results.push({
+        id: `${platform}-${Date.now()}-${i}`,
+        platform,
+        author: authors[Math.floor(Math.random() * authors.length)],
+        channelTitle: `کانال ${platform}`,
+        content: `این یک نتیجه آزمایشی برای جستجوی "${query}" در ${platform} است. محتوای تولید شده برای نمایش قابلیت‌ها و ظاهر برنامه است.`,
+        date: new Date(
+          Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000
+        ).toLocaleDateString("fa-IR"),
+        sentiment: sentiments[Math.floor(Math.random() * sentiments.length)],
+        mediaType: i % 3 === 0 ? "image" : "text",
+        media:
+          i % 3 === 0
+            ? `https://picsum.photos/seed/${query}${i}/400/200`
+            : null,
+        engagement: {
+          likes: Math.floor(Math.random() * 2000),
+          comments: Math.floor(Math.random() * 500),
+          shares: Math.floor(Math.random() * 100),
+        },
+        originalUrl: "#",
+      });
+    }
+    return results;
   },
-  eitaa: {
-    baseUrl: "https://eitaayar.ir/api",
-    token: "bot386047:e951ff62-f45e-4254-ae7d-30b94d1f02b6",
-  },
-  openai: {
-    baseUrl: "https://api.openai.com/v1",
-    model: "gpt-3.5-turbo",
-  },
-  gemini: {
-    baseUrl: "https://generativelanguage.googleapis.com/v1beta",
-    model: "gemini-pro",
-  },
-};
+  searchMultiPlatform: async (query, platforms, filters, useAI, aiProvider) => {
+    console.log("Searching with:", { query, platforms, filters, useAI });
+    await new Promise((res) => setTimeout(res, 1500)); // Simulate search time
 
-// Authentication Context
-const AuthContext = React.createContext();
+    // Simulate backend failure to test fallback
+    if (query.toLowerCase() === "fail") {
+      throw new Error("Simulated multi-platform search failure.");
+    }
 
-const useAuth = () => {
-  const context = React.useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth must be used within AuthProvider");
-  }
-  return context;
-};
-
-// Auth Provider with Firebase
-const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        const userDoc = await getDoc(doc(db, "users", firebaseUser.uid));
-        const userData = {
-          uid: firebaseUser.uid,
-          email: firebaseUser.email,
-          name: firebaseUser.displayName || "کاربر",
-          ...userDoc.data(),
-        };
-        setUser(userData);
-      } else {
-        setUser(null);
-      }
-      setLoading(false);
+    let allResults = [];
+    platforms.forEach((p) => {
+      allResults = [...allResults, ...apiService.getMockResults(p, query, 5)];
     });
 
-    return unsubscribe;
-  }, []);
+    let aiInsight = null;
+    if (useAI) {
+      aiInsight = `تحلیل هوش مصنوعی (${aiProvider.toUpperCase()}):
+- کلیدواژه "${query}" در پلتفرم‌های ${platforms.join(
+        ", "
+      )} به طور گسترده‌ای مورد بحث قرار گرفته است.
+- احساسات غالب، خنثی با گرایش به مثبت است که نشان‌دهنده بحث‌های متعادل است.
+- بیشترین تعامل در پلتفرم اینستاگرام مشاهده شده که عمدتا به دلیل محتوای تصویری است.
+- پیشنهاد می‌شود برای تحلیل عمیق‌تر، روی ترندهای زمانی و جغرافیایی تمرکز شود.`;
+    }
 
-  const login = async (email, password) => {
-    const result = await signInWithEmailAndPassword(auth, email, password);
-    return result;
+    return { results: allResults, aiInsight };
+  },
+  enhanceSearchWithAI: async (query, platforms, results, aiProvider) => {
+    await new Promise((res) => setTimeout(res, 1000));
+    return `تحلیل هوش مصنوعی (Fallback - ${aiProvider.toUpperCase()}):
+- کلیدواژه "${query}" در پلتفرم‌های ${platforms} بحث‌برانگیز بوده.
+- نتایج اولیه نشان‌دهنده اهمیت بالای محتوای تصویری در این موضوع است.`;
+  },
+  // Individual platform searches (used in fallback)
+  searchInstagram: async (query, filters) =>
+    apiService.getMockResults("instagram", query, 7),
+  searchTwitter: async (query, filters) =>
+    apiService.getMockResults("twitter", query, 7),
+  searchEitaa: async (query, filters) =>
+    apiService.getMockResults("eitaa", query, 7),
+
+  exportResults: (results, format) => {
+    const dataStr =
+      `data:text/${format};charset=utf-8,` +
+      encodeURIComponent(JSON.stringify(results, null, 2));
+    const downloadAnchorNode = document.createElement("a");
+    downloadAnchorNode.setAttribute("href", dataStr);
+    downloadAnchorNode.setAttribute("download", `results.${format}`);
+    document.body.appendChild(downloadAnchorNode);
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
+    alert(`نتایج در فرمت ${format} دانلود شد.`);
+  },
+  shareResults: (results, query) => {
+    const shareText = `نتایج جستجو برای "${query}":\n\nتعداد ${results.length} نتیجه یافت شد. برای مشاهده کامل، به اپلیکیشن کاوش مراجعه کنید.`;
+    if (navigator.share) {
+      navigator.share({
+        title: `نتایج جستجو: ${query}`,
+        text: shareText,
+        url: window.location.href,
+      });
+    } else {
+      alert("قابلیت اشتراک‌گذاری در این مرورگر پشتیبانی نمی‌شود.");
+    }
+  },
+};
+
+// --- Authentication Context ---
+const AuthContext = createContext(null);
+
+const AuthProvider = ({ children }) => {
+  // In a real app, this would be determined by a token, session, etc.
+  const [user, setUser] = useState({
+    name: "علی رضایی",
+    searches: 50,
+    aiTokens: 1000,
+    plan: "Free",
+  });
+
+  const logout = () => {
+    setUser(null);
+    // In a real app, you'd clear tokens and redirect to a login page
+    alert("شما از حساب کاربری خود خارج شدید.");
   };
 
-  const loginWithGoogle = async () => {
-    const result = await signInWithPopup(auth, googleProvider);
-    await setDoc(
-      doc(db, "users", result.user.uid),
-      {
-        name: result.user.displayName,
-        email: result.user.email,
-        plan: "Free",
-        searches: 50,
-        aiTokens: 1000,
-        createdAt: new Date().toISOString(),
-      },
-      { merge: true }
-    );
-    return result;
-  };
-
-  const logout = async () => {
-    await signOut(auth);
-  };
-
-  const value = {
-    user,
-    login,
-    loginWithGoogle,
-    logout,
-    loading,
-  };
+  const value = { user, logout };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-// Loading Spinner Component
-const LoadingSpinner = () => (
-  <motion.div
-    className="flex items-center justify-center min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900"
-    initial={{ opacity: 0 }}
-    animate={{ opacity: 1 }}
-    exit={{ opacity: 0 }}
-  >
-    <motion.div
-      className="w-16 h-16 border-4 border-blue-200 border-t-transparent rounded-full"
-      animate={{ rotate: 360 }}
-      transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-    />
-  </motion.div>
-);
-
-// Login Component
-const Login = () => {
-  const [formData, setFormData] = useState({
-    email: "",
-    password: "",
-  });
-  const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState(false);
-  const { login, loginWithGoogle } = useAuth();
-  const navigate = useNavigate();
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError("");
-
-    try {
-      await login(formData.email, formData.password);
-      setSuccess(true);
-      setTimeout(() => {
-        navigate("/dashboard");
-      }, 2000);
-    } catch (error) {
-      setError("ایمیل یا رمز عبور نادرست است");
-      setLoading(false);
-    }
-  };
-
-  const handleGoogleLogin = async () => {
-    setLoading(true);
-    setError("");
-
-    try {
-      await loginWithGoogle();
-      setSuccess(true);
-      setTimeout(() => {
-        navigate("/dashboard");
-      }, 2000);
-    } catch (error) {
-      setError("خطا در ورود با گوگل");
-      setLoading(false);
-    }
-  };
-
-  const handleInputChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
-  };
-
-  if (success) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center p-4">
-        <motion.div
-          className="text-center"
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.8 }}
-        >
-          <motion.div
-            className="w-20 h-20 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-6"
-            initial={{ scale: 0 }}
-            animate={{ scale: [0, 1.2, 1] }}
-            transition={{ duration: 0.6, times: [0, 0.6, 1] }}
-          >
-            <CheckCircle className="w-10 h-10 text-white" />
-          </motion.div>
-          <motion.h2
-            className="text-2xl font-bold text-white mb-2 font-persian"
-            initial={{ y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.3, duration: 0.5 }}
-          >
-            ورود موفق!
-          </motion.h2>
-          <motion.p
-            className="text-blue-200 font-persian"
-            initial={{ y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.5, duration: 0.5 }}
-          >
-            در حال انتقال به داشبورد...
-          </motion.p>
-        </motion.div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center p-4 overflow-hidden">
-      {/* Animated Background Elements */}
-      <div className="absolute inset-0 overflow-hidden">
-        <motion.div
-          className="absolute -top-4 -left-4 w-72 h-72 bg-purple-500 rounded-full opacity-10 blur-3xl"
-          animate={{
-            x: [0, 100, 0],
-            y: [0, -100, 0],
-          }}
-          transition={{
-            duration: 20,
-            repeat: Infinity,
-            ease: "easeInOut",
-          }}
-        />
-        <motion.div
-          className="absolute top-1/2 -right-4 w-96 h-96 bg-blue-500 rounded-full opacity-10 blur-3xl"
-          animate={{
-            x: [0, -100, 0],
-            y: [0, 100, 0],
-          }}
-          transition={{
-            duration: 15,
-            repeat: Infinity,
-            ease: "easeInOut",
-          }}
-        />
-      </div>
-
-      <motion.div
-        className="w-full max-w-md relative z-10"
-        initial={{ opacity: 0, y: 50 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.8 }}
-      >
-        {/* Logo and Title */}
-        <motion.div
-          className="text-center mb-8"
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2, duration: 0.8 }}
-        >
-          <motion.div
-            className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-r from-blue-500 to-purple-600 rounded-2xl mb-4 shadow-2xl"
-            whileHover={{ scale: 1.1, rotate: 5 }}
-            whileTap={{ scale: 0.95 }}
-          >
-            <Search className="w-10 h-10 text-white" />
-          </motion.div>
-          <h1 className="text-4xl font-bold text-white mb-2 font-persian">
-            کاوش
-          </h1>
-          <p className="text-blue-200 font-persian">
-            پلتفرم هوشمند جستجوی شبکه‌های اجتماعی
-          </p>
-          <p className="text-sm text-blue-300 mt-2 font-persian">
-            توسط مهرشاد همآوندی
-          </p>
-        </motion.div>
-
-        {/* Auth Form */}
-        <motion.div
-          className="bg-white/10 backdrop-blur-lg rounded-3xl p-8 shadow-2xl border border-white/20"
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.4, duration: 0.8 }}
-        >
-          <h2 className="text-2xl font-bold text-white mb-6 text-center font-persian">
-            ورود به حساب کاربری
-          </h2>
-
-          {error && (
-            <motion.div
-              className="bg-red-500/20 border border-red-500/50 rounded-xl p-3 mb-4 flex items-center space-x-2 rtl:space-x-reverse"
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-            >
-              <AlertCircle className="w-5 h-5 text-red-400" />
-              <span className="text-red-200 text-sm font-persian mr-2">
-                {error}
-              </span>
-            </motion.div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <input
-              type="email"
-              name="email"
-              placeholder="ایمیل"
-              value={formData.email}
-              onChange={handleInputChange}
-              className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent font-persian text-right transition-all duration-300"
-              required
-            />
-
-            <div className="relative">
-              <input
-                type={showPassword ? "text" : "password"}
-                name="password"
-                placeholder="رمز عبور"
-                value={formData.password}
-                onChange={handleInputChange}
-                className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent font-persian text-right transition-all duration-300"
-                required
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute left-3 top-1/2 transform -translate-y-1/2 text-blue-200 hover:text-white transition-colors"
-              >
-                {showPassword ? (
-                  <EyeOff className="w-5 h-5" />
-                ) : (
-                  <Eye className="w-5 h-5" />
-                )}
-              </button>
-            </div>
-
-            <motion.button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl font-persian font-semibold hover:from-blue-600 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 focus:ring-offset-transparent disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-lg hover:shadow-xl"
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-            >
-              {loading ? (
-                <div className="flex items-center justify-center space-x-2">
-                  <motion.div
-                    className="w-5 h-5 border-2 border-white border-t-transparent rounded-full"
-                    animate={{ rotate: 360 }}
-                    transition={{
-                      duration: 1,
-                      repeat: Infinity,
-                      ease: "linear",
-                    }}
-                  />
-                  <span className="mr-2 font-persian">در حال ورود...</span>
-                </div>
-              ) : (
-                "ورود"
-              )}
-            </motion.button>
-          </form>
-
-          {/* Google Login */}
-          <div className="mt-4">
-            <div className="flex items-center my-4">
-              <div className="flex-1 h-px bg-white/20"></div>
-              <span className="px-4 text-blue-200 text-sm font-persian">
-                یا
-              </span>
-              <div className="flex-1 h-px bg-white/20"></div>
-            </div>
-
-            <motion.button
-              onClick={handleGoogleLogin}
-              disabled={loading}
-              className="w-full py-3 bg-white/10 border border-white/20 text-white rounded-xl font-persian font-medium hover:bg-white/20 transition-all duration-300 flex items-center justify-center space-x-3"
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-            >
-              <svg className="w-5 h-5" viewBox="0 0 24 24">
-                <path
-                  fill="currentColor"
-                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                />
-                <path
-                  fill="currentColor"
-                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                />
-                <path
-                  fill="currentColor"
-                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                />
-                <path
-                  fill="currentColor"
-                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                />
-              </svg>
-              <span className="mr-2">ورود با گوگل</span>
-            </motion.button>
-          </div>
-
-          <motion.div
-            className="mt-6 text-center"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.6 }}
-          >
-            <a
-              href="#"
-              className="text-blue-300 hover:text-white text-sm font-persian transition-colors"
-            >
-              رمز عبور خود را فراموش کردید؟
-            </a>
-          </motion.div>
-        </motion.div>
-
-        {/* Demo Credentials */}
-        <motion.div
-          className="mt-6 bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.8, duration: 0.8 }}
-        >
-          <h3 className="text-sm font-semibold text-white mb-2 font-persian">
-            برای تست:
-          </h3>
-          <p className="text-xs text-blue-200 font-persian">
-            ایمیل: demo@kavosh.ir
-            <br />
-            رمز عبور: demo123456
-          </p>
-        </motion.div>
-      </motion.div>
-    </div>
-  );
+const useAuth = () => {
+  return useContext(AuthContext);
 };
 
-// Fixed Custom Dropdown Component
+// --- Custom Dropdown Component ---
 const CustomDropdown = ({
   value,
   onChange,
@@ -511,58 +190,59 @@ const CustomDropdown = ({
   icon: Icon,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef(null);
   const selectedOption = options.find((opt) => opt.value === value);
 
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   return (
-    <div className="relative z-20">
-      <motion.button
+    <div className="relative font-persian" ref={dropdownRef}>
+      <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full px-4 py-3 bg-white/10 backdrop-blur-sm border-2 border-white/30 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-400 font-persian flex items-center justify-between hover:bg-white/20 transition-all duration-300"
-        whileHover={{ scale: 1.02 }}
-        whileTap={{ scale: 0.98 }}
+        className="w-full flex items-center justify-between px-4 py-3 bg-white/10 backdrop-blur-sm border-2 border-white/30 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
       >
         <div className="flex items-center space-x-2 rtl:space-x-reverse">
-          {Icon && <Icon className="w-4 h-4 text-blue-300" />}
-          <span className="mr-2">
-            {selectedOption ? selectedOption.label : placeholder}
-          </span>
+          <Icon className="w-5 h-5 text-blue-300" />
+          <span>{selectedOption ? selectedOption.label : placeholder}</span>
         </div>
-        <motion.div
-          animate={{ rotate: isOpen ? 180 : 0 }}
-          transition={{ duration: 0.2 }}
-        >
-          <ChevronDown className="w-4 h-4 text-blue-300" />
-        </motion.div>
-      </motion.button>
-
+        <ChevronDown
+          className={`w-5 h-5 text-blue-300 transition-transform duration-300 ${
+            isOpen ? "transform rotate-180" : ""
+          }`}
+        />
+      </button>
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            className="absolute top-full left-0 right-0 mt-2 bg-white/20 backdrop-blur-lg border-2 border-white/30 rounded-xl shadow-2xl z-50 max-h-60 overflow-y-auto"
-            initial={{ opacity: 0, y: -10, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -10, scale: 0.95 }}
-            transition={{ duration: 0.2 }}
-            style={{ zIndex: 1000 }}
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="absolute z-10 mt-2 w-full bg-slate-800/80 backdrop-blur-lg border border-white/20 rounded-xl shadow-lg"
           >
-            {options.map((option) => (
-              <motion.button
-                key={option.value}
-                type="button"
-                onClick={() => {
-                  onChange(option.value);
-                  setIsOpen(false);
-                }}
-                className="w-full px-4 py-3 text-right text-white hover:bg-white/20 font-persian transition-all duration-200 border-b border-white/10 last:border-b-0 flex items-center space-x-2 rtl:space-x-reverse"
-                whileHover={{ x: 5 }}
-              >
-                {option.icon && (
-                  <option.icon className="w-4 h-4 text-blue-300" />
-                )}
-                <span className="mr-2">{option.label}</span>
-              </motion.button>
-            ))}
+            <ul className="py-2">
+              {options.map((option) => (
+                <li
+                  key={option.value}
+                  onClick={() => {
+                    onChange(option.value);
+                    setIsOpen(false);
+                  }}
+                  className="px-4 py-2 text-white hover:bg-blue-500/30 cursor-pointer flex items-center space-x-2 rtl:space-x-reverse"
+                >
+                  <option.icon className="w-5 h-5" />
+                  <span>{option.label}</span>
+                </li>
+              ))}
+            </ul>
           </motion.div>
         )}
       </AnimatePresence>
@@ -570,463 +250,7 @@ const CustomDropdown = ({
   );
 };
 
-// Enhanced API Service with Eitaa Integration
-class APIService {
-  constructor() {
-    this.apiKeys = {
-      instagram: "YOUR_INSTAGRAM_TOKEN",
-      twitter:
-        "AAAAAAAAAAAAAAAAAAAAANes3QEAAAAAseonNSQcSJS9AniPwjzPiCoHHOI%3DjCsh0wvz6sVZHjLqYqERMaxLrWF0XYxWxkBvH1RTLI5q8u6C8u",
-      openai:
-        "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",
-      gemini: "AIzaSyDSE3yS1BjYQ41O79SjK0cG6pEQarMLihE",
-    };
-  }
-
-  // Eitaa API Integration
-  async searchEitaa(query, options = {}) {
-    try {
-      // Search in Eitaa channels
-      const searchResponse = await this.makeEitaaRequest("searchChannels", {
-        query,
-        limit: 20,
-      });
-
-      // Get channel posts
-      let allPosts = [];
-      if (searchResponse.channels) {
-        for (const channel of searchResponse.channels.slice(0, 5)) {
-          const posts = await this.getEitaaChannelPosts(
-            channel.username,
-            query
-          );
-          allPosts = [...allPosts, ...posts];
-        }
-      }
-
-      return this.formatEitaaResults(allPosts, query);
-    } catch (error) {
-      console.error("Eitaa API Error:", error);
-      return this.getMockResults("eitaa", query);
-    }
-  }
-
-  async getEitaaChannelPosts(channelUsername, query) {
-    try {
-      const posts = await this.makeEitaaRequest("getChannelPosts", {
-        channel: channelUsername,
-        limit: 10,
-      });
-
-      // Filter posts by query
-      return posts.filter(
-        (post) =>
-          post.text?.toLowerCase().includes(query.toLowerCase()) ||
-          post.caption?.toLowerCase().includes(query.toLowerCase())
-      );
-    } catch (error) {
-      console.error(`Error fetching posts from ${channelUsername}:`, error);
-      return [];
-    }
-  }
-
-  async getEitaaChannelInfo(channelUsername) {
-    try {
-      return await this.makeEitaaRequest("getChannelInfo", {
-        channel: channelUsername,
-      });
-    } catch (error) {
-      console.error(
-        `Error fetching channel info for ${channelUsername}:`,
-        error
-      );
-      return null;
-    }
-  }
-
-  async getEitaaChannelMembers(channelUsername) {
-    try {
-      return await this.makeEitaaRequest("getChannelMembers", {
-        channel: channelUsername,
-      });
-    } catch (error) {
-      console.error(
-        `Error fetching channel members for ${channelUsername}:`,
-        error
-      );
-      return null;
-    }
-  }
-
-  async makeEitaaRequest(endpoint, params) {
-    const url = `${API_CONFIG.eitaa.baseUrl}/${endpoint}`;
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${API_CONFIG.eitaa.token}`,
-      },
-      body: JSON.stringify(params),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Eitaa API error: ${response.status}`);
-    }
-
-    return await response.json();
-  }
-
-  formatEitaaResults(posts, query) {
-    return posts.map((post, index) => ({
-      id: `eitaa_${post.id || index}`,
-      platform: "eitaa",
-      content: post.text || post.caption || "محتوای بدون متن",
-      author: post.channel?.username || `@channel_${index}`,
-      channelTitle: post.channel?.title || "کانال نامشخص",
-      date: new Date(post.date * 1000).toLocaleDateString("fa-IR"),
-      engagement: {
-        views: post.views || Math.floor(Math.random() * 10000) + 1000,
-        likes: post.reactions?.total || Math.floor(Math.random() * 1000) + 50,
-        comments: post.replies || Math.floor(Math.random() * 100) + 10,
-        shares: post.forwards || Math.floor(Math.random() * 50) + 5,
-      },
-      sentiment: this.analyzeSentiment(post.text || post.caption || ""),
-      media: post.photo
-        ? post.photo.file_id
-        : post.video
-        ? post.video.file_id
-        : null,
-      originalUrl: `https://eitaa.com/${post.channel?.username}/${post.message_id}`,
-      mediaType: post.photo ? "image" : post.video ? "video" : "text",
-      isChannel: true,
-      channelInfo: post.channel,
-    }));
-  }
-
-  // Twitter API Integration (fixed CORS issue by using a proxy)
-  async searchTwitter(query, options = {}) {
-    try {
-      // Use a CORS proxy or backend endpoint
-      const proxyUrl = "https://cors-anywhere.herokuapp.com/";
-      const response = await fetch(
-        `${proxyUrl}${
-          API_CONFIG.twitter.baseUrl
-        }/tweets/search/recent?query=${encodeURIComponent(
-          query
-        )}&tweet.fields=created_at,author_id,public_metrics,attachments&expansions=author_id,attachments.media_keys&media.fields=url`,
-        {
-          headers: {
-            Authorization: `Bearer ${this.apiKeys.twitter}`,
-            "X-Requested-With": "XMLHttpRequest",
-          },
-        }
-      );
-      const data = await response.json();
-      return this.formatTwitterResults(data);
-    } catch (error) {
-      console.error("Twitter API Error:", error);
-      return this.getMockResults("twitter", query);
-    }
-  }
-
-  // Instagram API Integration
-  async searchInstagram(query, options = {}) {
-    try {
-      const response = await fetch(
-        `${API_CONFIG.instagram.baseUrl}/me/media?fields=id,caption,media_type,media_url,permalink,timestamp&access_token=${this.apiKeys.instagram}`
-      );
-      const data = await response.json();
-
-      const filteredResults =
-        data.data?.filter((post) =>
-          post.caption?.toLowerCase().includes(query.toLowerCase())
-        ) || [];
-
-      return this.formatInstagramResults(filteredResults);
-    } catch (error) {
-      console.error("Instagram API Error:", error);
-      return this.getMockResults("instagram", query);
-    }
-  }
-
-  // Fixed AI Enhancement
-  async enhanceSearchWithAI(
-    query,
-    platform,
-    results = [],
-    aiProvider = "openai"
-  ) {
-    try {
-      const resultsContext = results.slice(0, 5).map((r) => ({
-        platform: r.platform,
-        content: r.content.substring(0, 200),
-        sentiment: r.sentiment,
-        engagement: r.engagement,
-      }));
-
-      const prompt = `تحلیل نتایج جستجوی "${query}" در پلتفرم‌های ${platform}:
-
-نتایج نمونه:
-${JSON.stringify(resultsContext, null, 2)}
-
-لطفاً تحلیل جامعی از:
-1. روند کلی محتوا
-2. احساسات غالب
-3. میزان تعامل
-4. توصیه‌هایی برای بهبود جستجو
-ارائه دهید.`;
-
-      if (aiProvider === "openai" && this.apiKeys.openai) {
-        const response = await fetch(
-          `${API_CONFIG.openai.baseUrl}/chat/completions`,
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${this.apiKeys.openai}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              model: API_CONFIG.openai.model,
-              messages: [{ role: "user", content: prompt }],
-              max_tokens: 500,
-              temperature: 0.7,
-            }),
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error(`OpenAI API error: ${response.status}`);
-        }
-
-        const data = await response.json();
-        return data.choices[0].message.content;
-      } else if (aiProvider === "gemini" && this.apiKeys.gemini) {
-        const response = await fetch(
-          `${API_CONFIG.gemini.baseUrl}/models/gemini-pro:generateContent?key=${this.apiKeys.gemini}`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: prompt }] }],
-            }),
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error(`Gemini API error: ${response.status}`);
-        }
-
-        const data = await response.json();
-        return data.candidates[0].content.parts[0].text;
-      }
-    } catch (error) {
-      console.error("AI Enhancement Error:", error);
-      return "تحلیل هوشمند در حال حاضر در دسترس نیست. لطفاً کلیدهای API را بررسی کنید.";
-    }
-  }
-
-  // Format Results
-  formatInstagramResults(posts) {
-    return posts.map((post) => ({
-      id: post.id,
-      platform: "instagram",
-      content: post.caption || "بدون توضیح",
-      author: "@user_" + post.id.slice(-6),
-      date: new Date(post.timestamp).toLocaleDateString("fa-IR"),
-      engagement: {
-        likes: Math.floor(Math.random() * 1000) + 100,
-        comments: Math.floor(Math.random() * 100) + 10,
-        shares: Math.floor(Math.random() * 50) + 5,
-      },
-      sentiment: this.analyzeSentiment(post.caption || ""),
-      media: post.media_url,
-      originalUrl: post.permalink,
-      mediaType: post.media_type,
-    }));
-  }
-
-  formatTwitterResults(data) {
-    if (!data.data) return [];
-
-    return data.data.map((tweet) => ({
-      id: tweet.id,
-      platform: "twitter",
-      content: tweet.text,
-      author:
-        data.includes?.users?.find((u) => u.id === tweet.author_id)?.username ||
-        "@unknown",
-      date: new Date(tweet.created_at).toLocaleDateString("fa-IR"),
-      engagement: {
-        likes: tweet.public_metrics.like_count,
-        comments: tweet.public_metrics.reply_count,
-        shares: tweet.public_metrics.retweet_count,
-      },
-      sentiment: this.analyzeSentiment(tweet.text),
-      originalUrl: `https://twitter.com/i/status/${tweet.id}`,
-      mediaType: "text",
-    }));
-  }
-
-  // Mock Results for Demo
-  getMockResults(platform, query, count = 7) {
-    const platforms = {
-      instagram: { icon: Instagram, color: "from-pink-500 to-purple-600" },
-      twitter: { icon: Twitter, color: "from-blue-400 to-blue-600" },
-      facebook: { icon: Facebook, color: "from-blue-600 to-blue-800" },
-      telegram: { icon: Send, color: "from-sky-400 to-sky-600" },
-      eitaa: { icon: MessageCircle, color: "from-green-500 to-green-700" },
-      rubika: { icon: MessageSquare, color: "from-red-500 to-red-700" },
-    };
-
-    // Enhanced mock data for Eitaa
-    if (platform === "eitaa") {
-      return Array.from({ length: count }, (_, i) => ({
-        id: `eitaa_${i + 1}`,
-        platform: "eitaa",
-        content: `محتوای کانال ایتا مرتبط با "${query}" - پست شماره ${
-          i + 1
-        }. این محتوا شامل اطلاعات مفیدی درباره موضوع جستجو می‌باشد.`,
-        author: `@channel_${i + 1}`,
-        channelTitle: `کانال ${i + 1}`,
-        date: `${i + 1} ساعت پیش`,
-        engagement: {
-          views: Math.floor(Math.random() * 50000) + 5000,
-          likes: Math.floor(Math.random() * 1000) + 50,
-          comments: Math.floor(Math.random() * 100) + 10,
-          shares: Math.floor(Math.random() * 50) + 5,
-        },
-        sentiment: ["positive", "neutral", "negative"][
-          Math.floor(Math.random() * 3)
-        ],
-        media: i % 3 === 0 ? `https://picsum.photos/400/300?random=${i}` : null,
-        originalUrl: `https://eitaa.com/channel_${i + 1}/${Math.floor(
-          Math.random() * 1000
-        )}`,
-        mediaType: i % 4 === 0 ? "video" : i % 3 === 0 ? "image" : "text",
-        isChannel: true,
-        channelInfo: {
-          title: `کانال ${i + 1}`,
-          username: `channel_${i + 1}`,
-          membersCount: Math.floor(Math.random() * 10000) + 1000,
-        },
-      }));
-    }
-
-    return Array.from({ length: count }, (_, i) => ({
-      id: `${platform}_${i + 1}`,
-      platform,
-      content: `محتوای مرتبط با "${query}" از ${platform} - نمونه شماره ${
-        i + 1
-      }`,
-      author: `@user${i + 1}`,
-      date: `${i + 1} ساعت پیش`,
-      engagement: {
-        likes: Math.floor(Math.random() * 1000) + 50,
-        comments: Math.floor(Math.random() * 100) + 10,
-        shares: Math.floor(Math.random() * 50) + 5,
-      },
-      sentiment: ["positive", "neutral", "negative"][
-        Math.floor(Math.random() * 3)
-      ],
-      media: i % 3 === 0 ? `https://picsum.photos/400/300?random=${i}` : null,
-      originalUrl: `https://${platform}.com/post/${i + 1}`,
-      mediaType: i % 4 === 0 ? "video" : i % 3 === 0 ? "image" : "text",
-    }));
-  }
-
-  analyzeSentiment(text) {
-    // Simple sentiment analysis
-    const positiveWords = ["عالی", "خوب", "بهترین", "موفق", "خوشحال", "عاشق"];
-    const negativeWords = ["بد", "ضعیف", "ناراحت", "مشکل", "غلط", "متنفر"];
-
-    const positive = positiveWords.some((word) => text.includes(word));
-    const negative = negativeWords.some((word) => text.includes(word));
-
-    if (positive && !negative) return "positive";
-    if (negative && !positive) return "negative";
-    return "neutral";
-  }
-
-  // Export functionality
-  exportResults(results, format = "json") {
-    const dataStr =
-      format === "json"
-        ? JSON.stringify(results, null, 2)
-        : this.convertToCSV(results);
-    const dataBlob = new Blob([dataStr], {
-      type: format === "json" ? "application/json" : "text/csv",
-    });
-
-    const url = URL.createObjectURL(dataBlob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `kavosh-report-${
-      new Date().toISOString().split("T")[0]
-    }.${format}`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  }
-
-  convertToCSV(results) {
-    if (!results.length) return "";
-
-    const headers = [
-      "پلتفرم",
-      "نویسنده",
-      "محتوا",
-      "تاریخ",
-      "لایک",
-      "نظر",
-      "اشتراک",
-      "احساسات",
-      "لینک اصلی",
-    ];
-    const rows = results.map((r) => [
-      r.platform,
-      r.author,
-      r.content.replace(/,/g, "،"),
-      r.date,
-      r.engagement.likes,
-      r.engagement.comments,
-      r.engagement.shares,
-      r.sentiment === "positive"
-        ? "مثبت"
-        : r.sentiment === "negative"
-        ? "منفی"
-        : "خنثی",
-      r.originalUrl,
-    ]);
-
-    return [headers, ...rows].map((row) => row.join(",")).join("\n");
-  }
-
-  // Share functionality
-  async shareResults(results, query) {
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: `نتایج جستجو کاوش: ${query}`,
-          text: `${results.length} نتیجه یافت شد برای جستجوی "${query}"`,
-          url: window.location.href,
-        });
-      } catch (error) {
-        console.log("Share cancelled");
-      }
-    } else {
-      const text = `نتایج جستجو کاوش: ${query}\n${results.length} نتیجه یافت شد\n${window.location.href}`;
-      navigator.clipboard.writeText(text);
-      alert("لینک کپی شد!");
-    }
-  }
-}
-
-const apiService = new APIService();
-
-// Dashboard Component with Enhanced Features
+// --- The Dashboard Component (Provided by you) ---
 const Dashboard = () => {
   const { user, logout } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
@@ -1044,11 +268,27 @@ const Dashboard = () => {
   const [useAI, setUseAI] = useState(false);
   const [aiProvider, setAiProvider] = useState("openai");
   const [aiInsight, setAiInsight] = useState("");
+  const [connectionStatus, setConnectionStatus] = useState("checking");
   const [userStats, setUserStats] = useState({
     searches: user?.searches || 50,
     aiTokens: user?.aiTokens || 1000,
     plan: user?.plan || "Free",
   });
+
+  // Check backend connection on component mount
+  useEffect(() => {
+    checkBackendConnection();
+  }, []);
+
+  const checkBackendConnection = async () => {
+    try {
+      const isConnected = await apiService.testConnection();
+      setConnectionStatus(isConnected ? "connected" : "disconnected");
+    } catch (error) {
+      setConnectionStatus("disconnected");
+      console.error("Backend connection failed:", error);
+    }
+  };
 
   const platforms = [
     {
@@ -1144,78 +384,131 @@ const Dashboard = () => {
     setAiInsight("");
 
     try {
-      let allResults = [];
+      // Use the new multi-platform search endpoint
+      const searchResponse = await apiService.searchMultiPlatform(
+        searchQuery,
+        selectedPlatforms,
+        filters,
+        useAI,
+        aiProvider
+      );
 
-      // Search each selected platform
-      for (const platform of selectedPlatforms) {
-        let platformResults = [];
+      setSearchResults(searchResponse.results || []);
 
-        switch (platform) {
-          case "instagram":
-            platformResults = await apiService.searchInstagram(
-              searchQuery,
-              filters
-            );
-            break;
-          case "twitter":
-            platformResults = await apiService.searchTwitter(
-              searchQuery,
-              filters
-            );
-            break;
-          case "eitaa":
-            platformResults = await apiService.searchEitaa(
-              searchQuery,
-              filters
-            );
-            break;
-          default:
-            platformResults = apiService.getMockResults(
-              platform,
-              searchQuery,
-              7
-            );
-        }
-
-        allResults = [...allResults, ...platformResults];
-      }
-
-      setSearchResults(allResults);
-
-      // AI Enhancement
-      if (useAI && userStats.aiTokens > 0 && allResults.length > 0) {
-        const insight = await apiService.enhanceSearchWithAI(
-          searchQuery,
-          selectedPlatforms.join(", "),
-          allResults,
-          aiProvider
-        );
-        setAiInsight(insight);
+      if (searchResponse.aiInsight) {
+        setAiInsight(searchResponse.aiInsight);
         setUserStats((prev) => ({ ...prev, aiTokens: prev.aiTokens - 100 }));
       }
 
       setUserStats((prev) => ({ ...prev, searches: prev.searches - 1 }));
     } catch (error) {
       console.error("Search error:", error);
-      // Fallback to mock data
-      const mockResults = apiService.getMockResults(
-        "instagram",
-        searchQuery,
-        7
-      );
-      setSearchResults(mockResults);
+
+      // Fallback to individual platform searches if multi-search fails
+      try {
+        let allResults = [];
+
+        for (const platform of selectedPlatforms) {
+          let platformResults = [];
+
+          switch (platform) {
+            case "instagram":
+              platformResults = await apiService.searchInstagram(
+                searchQuery,
+                filters
+              );
+              break;
+            case "twitter":
+              platformResults = await apiService.searchTwitter(
+                searchQuery,
+                filters
+              );
+              break;
+            case "eitaa":
+              platformResults = await apiService.searchEitaa(
+                searchQuery,
+                filters
+              );
+              break;
+            default:
+              platformResults = apiService.getMockResults(
+                platform,
+                searchQuery,
+                7
+              );
+          }
+
+          allResults = [...allResults, ...platformResults];
+        }
+
+        setSearchResults(allResults);
+
+        // Try AI Enhancement separately if backend multi-search failed
+        if (useAI && userStats.aiTokens > 0 && allResults.length > 0) {
+          try {
+            const insight = await apiService.enhanceSearchWithAI(
+              searchQuery,
+              selectedPlatforms.join(", "),
+              allResults,
+              aiProvider
+            );
+            setAiInsight(insight);
+            setUserStats((prev) => ({
+              ...prev,
+              aiTokens: prev.aiTokens - 100,
+            }));
+          } catch (aiError) {
+            console.error("AI Enhancement failed:", aiError);
+          }
+        }
+
+        setUserStats((prev) => ({ ...prev, searches: prev.searches - 1 }));
+      } catch (fallbackError) {
+        console.error("Fallback search failed:", fallbackError);
+        // Final fallback to mock data
+        const mockResults = apiService.getMockResults(
+          "instagram",
+          searchQuery,
+          7
+        );
+        setSearchResults(mockResults);
+      }
     } finally {
       setIsSearching(false);
     }
   };
 
   const loadMoreResults = async () => {
-    const additionalResults = apiService.getMockResults(
-      "instagram",
-      searchQuery,
-      5
-    );
-    setSearchResults((prev) => [...prev, ...additionalResults]);
+    try {
+      // Try to load more from backend first
+      const additionalResults = await apiService.searchMultiPlatform(
+        searchQuery,
+        selectedPlatforms,
+        { ...filters, offset: loadedResults, limit: 5 }
+      );
+
+      if (additionalResults.results?.length > 0) {
+        setSearchResults((prev) => [...prev, ...additionalResults.results]);
+      } else {
+        // Fallback to mock data
+        const mockResults = apiService.getMockResults(
+          "instagram",
+          searchQuery,
+          5
+        );
+        setSearchResults((prev) => [...prev, ...mockResults]);
+      }
+    } catch (error) {
+      console.error("Load more error:", error);
+      // Fallback to mock data
+      const mockResults = apiService.getMockResults(
+        "instagram",
+        searchQuery,
+        5
+      );
+      setSearchResults((prev) => [...prev, ...mockResults]);
+    }
+
     setLoadedResults((prev) => prev + 5);
   };
 
@@ -1296,6 +589,34 @@ const Dashboard = () => {
             </div>
 
             <div className="flex items-center space-x-4 rtl:space-x-reverse">
+              {/* Backend Connection Status */}
+              <div
+                className={`bg-white/10 rounded-xl px-3 py-2 border border-white/20 flex items-center space-x-2 rtl:space-x-reverse ${
+                  connectionStatus === "connected"
+                    ? "border-green-400/50"
+                    : connectionStatus === "disconnected"
+                    ? "border-red-400/50"
+                    : "border-yellow-400/50"
+                }`}
+              >
+                <div
+                  className={`w-2 h-2 rounded-full ${
+                    connectionStatus === "connected"
+                      ? "bg-green-400"
+                      : connectionStatus === "disconnected"
+                      ? "bg-red-400"
+                      : "bg-yellow-400 animate-pulse"
+                  }`}
+                />
+                <span className="text-sm text-white font-persian">
+                  {connectionStatus === "connected"
+                    ? "متصل"
+                    : connectionStatus === "disconnected"
+                    ? "قطع"
+                    : "در حال بررسی..."}
+                </span>
+              </div>
+
               <div className="bg-white/10 rounded-xl px-3 py-2 border border-white/20">
                 <div className="flex items-center space-x-2 rtl:space-x-reverse">
                   <Search className="w-4 h-4 text-blue-400" />
@@ -1350,6 +671,20 @@ const Dashboard = () => {
           <p className="text-xl text-blue-200 font-persian">
             با هوش مصنوعی در شبکه‌های اجتماعی جستجو کنید
           </p>
+          {connectionStatus === "disconnected" && (
+            <motion.div
+              className="mt-4 bg-red-500/20 border border-red-500/50 rounded-xl p-3 max-w-md mx-auto"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+            >
+              <div className="flex items-center justify-center space-x-2 rtl:space-x-reverse">
+                <AlertCircle className="w-5 h-5 text-red-400" />
+                <span className="text-red-200 text-sm font-persian mr-2">
+                  اتصال به سرور قطع است - از داده‌های آزمایشی استفاده می‌شود
+                </span>
+              </div>
+            </motion.div>
+          )}
         </motion.div>
 
         {/* Navigation Tabs */}
@@ -1383,7 +718,6 @@ const Dashboard = () => {
           </div>
         </motion.div>
 
-        {/* Tabs Content */}
         <AnimatePresence mode="wait">
           {activeTab === "search" && (
             <motion.div
@@ -1657,6 +991,8 @@ const Dashboard = () => {
                           <p className="text-blue-200 font-persian">
                             {searchResults.length} نتیجه یافت شد از{" "}
                             {selectedPlatforms.length} پلتفرم
+                            {connectionStatus === "disconnected" &&
+                              " (آزمایشی)"}
                           </p>
                         </div>
                       </div>
@@ -1697,7 +1033,7 @@ const Dashboard = () => {
                         </div>
                         <div className="flex-1">
                           <h3 className="text-lg font-semibold text-white mb-3 font-persian">
-                            تحلیل هوش مصنوعی
+                            تحلیل هوش مصنوعی ({aiProvider.toUpperCase()})
                           </h3>
                           <div className="text-purple-100 leading-relaxed font-persian whitespace-pre-wrap">
                             {aiInsight}
@@ -1797,22 +1133,22 @@ const Dashboard = () => {
                                     <div className="flex items-center space-x-2 rtl:space-x-reverse">
                                       <Heart className="w-4 h-4 text-red-400" />
                                       <span className="text-sm text-gray-300">
-                                        {result.engagement.likes?.toLocaleString() ||
-                                          result.engagement.views?.toLocaleString() ||
+                                        {result.engagement?.likes?.toLocaleString() ||
+                                          result.engagement?.views?.toLocaleString() ||
                                           0}
                                       </span>
                                     </div>
                                     <div className="flex items-center space-x-2 rtl:space-x-reverse">
                                       <MessageSquare className="w-4 h-4 text-blue-400" />
                                       <span className="text-sm text-gray-300">
-                                        {result.engagement.comments?.toLocaleString() ||
+                                        {result.engagement?.comments?.toLocaleString() ||
                                           0}
                                       </span>
                                     </div>
                                     <div className="flex items-center space-x-2 rtl:space-x-reverse">
                                       <Repeat2 className="w-4 h-4 text-green-400" />
                                       <span className="text-sm text-gray-300">
-                                        {result.engagement.shares?.toLocaleString() ||
+                                        {result.engagement?.shares?.toLocaleString() ||
                                           0}
                                       </span>
                                     </div>
@@ -1968,6 +1304,47 @@ const Dashboard = () => {
                   </div>
                 </motion.div>
 
+                {/* Backend Status */}
+                <motion.div
+                  className={`bg-white/10 backdrop-blur-lg rounded-2xl p-6 border ${
+                    connectionStatus === "connected"
+                      ? "border-green-400/30"
+                      : "border-red-400/30"
+                  }`}
+                  whileHover={{ scale: 1.02 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <div className="flex items-center space-x-4 rtl:space-x-reverse">
+                    <div
+                      className={`w-12 h-12 bg-gradient-to-r ${
+                        connectionStatus === "connected"
+                          ? "from-green-500 to-emerald-600"
+                          : "from-red-500 to-red-700"
+                      } rounded-xl flex items-center justify-center`}
+                    >
+                      {connectionStatus === "connected" ? (
+                        <CheckCircle className="w-6 h-6 text-white" />
+                      ) : (
+                        <AlertCircle className="w-6 h-6 text-white" />
+                      )}
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-white font-persian">
+                        وضعیت سرور
+                      </h3>
+                      <p
+                        className={`text-xl font-bold ${
+                          connectionStatus === "connected"
+                            ? "text-green-400"
+                            : "text-red-400"
+                        }`}
+                      >
+                        {connectionStatus === "connected" ? "متصل" : "قطع"}
+                      </p>
+                    </div>
+                  </div>
+                </motion.div>
+
                 {/* Platform Usage Chart */}
                 <motion.div
                   className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20 md:col-span-2 lg:col-span-3"
@@ -2003,12 +1380,16 @@ const Dashboard = () => {
                             initial={{ width: 0 }}
                             animate={{
                               width: `${
-                                selectedPlatforms.includes(platform.id)
+                                selectedPlatforms.includes(platform.id) &&
+                                searchResults.length > 0
                                   ? Math.floor(Math.random() * 50) + 30
                                   : Math.floor(Math.random() * 20) + 5
                               }%`,
                             }}
-                            transition={{ delay: index * 0.2, duration: 0.8 }}
+                            transition={{
+                              delay: index * 0.2,
+                              duration: 0.8,
+                            }}
                           />
                         </div>
                       </motion.div>
@@ -2056,41 +1437,13 @@ const Dashboard = () => {
   );
 };
 
-// Protected Route Component
-const ProtectedRoute = ({ children }) => {
-  const { user, loading } = useAuth();
-
-  if (loading) {
-    return <LoadingSpinner />;
-  }
-
-  return user ? children : <Navigate to="/" replace />;
-};
-
-// Main App Component
-const App = () => {
+// --- Main App Component ---
+function App() {
   return (
     <AuthProvider>
-      <Router>
-        <div className="App">
-          <AnimatePresence mode="wait">
-            <Routes>
-              <Route path="/" element={<Login />} />
-              <Route
-                path="/dashboard"
-                element={
-                  <ProtectedRoute>
-                    <Dashboard />
-                  </ProtectedRoute>
-                }
-              />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </AnimatePresence>
-        </div>
-      </Router>
+      <Dashboard />
     </AuthProvider>
   );
-};
+}
 
 export default App;

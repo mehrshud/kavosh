@@ -46,10 +46,6 @@ import {
   Sparkles,
   UserCheck,
 } from "lucide-react";
-// Note: Ensure you have a globals.css file for Tailwind directives.
-// import "./styles/globals.css";
-
-// --- Firebase & API Configuration ---
 
 // Firebase Configuration
 import { initializeApp } from "firebase/app";
@@ -63,8 +59,10 @@ import {
 } from "firebase/auth";
 import { getFirestore, doc, setDoc, getDoc } from "firebase/firestore";
 
+// Import the API service
+import apiService from "./services/apiService";
+
 const firebaseConfig = {
-  // IMPORTANT: Use a .env.local file for these values in a real project
   apiKey: process.env.REACT_APP_FIREBASE_API_KEY || "YOUR_API_KEY",
   authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
   projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
@@ -79,24 +77,7 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
 
-// API Configuration
-const API_CONFIG = {
-  // Configs for Eitaa, OpenAI, etc.
-  eitaa: {
-    baseUrl: "https://eitaayar.ir/api",
-    token: "YOUR_EITAAYAR_TOKEN", // Replace with your actual token
-  },
-  openai: {
-    baseUrl: "https://api.openai.com/v1",
-    model: "gpt-3.5-turbo",
-  },
-  gemini: {
-    baseUrl: "https://generativelanguage.googleapis.com/v1beta",
-    model: "gemini-pro",
-  },
-};
-
-// --- Authentication ---
+// --- Authentication Context ---
 
 const AuthContext = createContext();
 
@@ -146,7 +127,6 @@ const AuthProvider = ({ children }) => {
 
   const loginWithGoogle = async () => {
     const result = await signInWithPopup(auth, googleProvider);
-    // User data is now handled by the onAuthStateChanged listener
     return result;
   };
 
@@ -156,99 +136,6 @@ const AuthProvider = ({ children }) => {
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
-
-// --- API Service ---
-class APIService {
-  constructor() {
-    this.apiKeys = {
-      // It's highly recommended to handle these server-side or via a secure proxy
-      openai: process.env.REACT_APP_OPENAI_API_KEY,
-      gemini: process.env.REACT_APP_GEMINI_API_KEY,
-    };
-  }
-
-  async testConnection() {
-    // A simple check to simulate backend connectivity for the UI
-    return true;
-  }
-
-  // Fallback mock results if real APIs fail or are not configured
-  getMockResults(platform, query, count = 7) {
-    return Array.from({ length: count }, (_, i) => ({
-      id: `${platform}_${Date.now()}_${i}`,
-      platform,
-      content: `محتوای آزمایشی مرتبط با "${query}" از ${platform} - نمونه شماره ${
-        i + 1
-      }`,
-      author: `@user_${platform}_${i}`,
-      date: new Date(Date.now() - i * 3600000).toLocaleDateString("fa-IR"),
-      engagement: {
-        likes: Math.floor(Math.random() * 1000),
-        comments: Math.floor(Math.random() * 100),
-        shares: Math.floor(Math.random() * 50),
-        views: Math.floor(Math.random() * 5000),
-      },
-      sentiment: ["positive", "neutral", "negative"][
-        Math.floor(Math.random() * 3)
-      ],
-      media: i % 3 === 0 ? `https://picsum.photos/400/200?random=${i}` : null,
-      originalUrl: `#`,
-      mediaType: i % 4 === 0 ? "video" : i % 3 === 0 ? "image" : "text",
-    }));
-  }
-
-  // --- Real API Methods (using mock data as placeholder) ---
-  // In a real scenario, you'd implement the full fetch logic here.
-  async searchInstagram(query, filters) {
-    console.log("Searching Instagram for:", query);
-    // Placeholder: returns mock data
-    return this.getMockResults("instagram", query);
-  }
-
-  async searchTwitter(query, filters) {
-    console.log("Searching Twitter for:", query);
-    // Placeholder: returns mock data
-    return this.getMockResults("twitter", query);
-  }
-
-  async searchEitaa(query, filters) {
-    console.log("Searching Eitaa for:", query);
-    // Placeholder: returns mock data
-    return this.getMockResults("eitaa", query);
-  }
-
-  async enhanceSearchWithAI(query, platforms, results, aiProvider) {
-    if (!this.apiKeys[aiProvider]) {
-      return "کلید API برای این سرویس دهنده هوش مصنوعی تنظیم نشده است.";
-    }
-    // This is a simplified version of your AI prompt logic
-    const prompt = `Analyze these search results for "${query}" from ${platforms} and provide a summary. Results: ${JSON.stringify(
-      results.slice(0, 2).map((r) => r.content)
-    )}`;
-
-    // Using mock response to avoid key exposure in this example
-    return `تحلیل هوشمند (${aiProvider.toUpperCase()}): بر اساس نتایج، موضوع "${query}" در ${platforms} دارای احساسات غالبا خنثی است و بیشترین تعامل در محتوای تصویری دیده می‌شود.`;
-  }
-
-  exportResults(results, format) {
-    alert(`درخواست خروجی گرفتن نتایج با فرمت ${format} ارسال شد.`);
-  }
-
-  shareResults(results, query) {
-    if (navigator.share) {
-      navigator
-        .share({
-          title: `نتایج جستجو برای: ${query}`,
-          text: `تعداد ${results.length} نتیجه برای "${query}" یافت شد.`,
-          url: window.location.href,
-        })
-        .catch((err) => console.error("Share failed", err));
-    } else {
-      alert("قابلیت اشتراک گذاری در این مرورگر پشتیبانی نمی‌شود.");
-    }
-  }
-}
-const apiService = new APIService();
 
 // --- UI Components ---
 
@@ -488,7 +375,7 @@ const Login = () => {
   );
 };
 
-// This is the advanced Dashboard component from the previous step
+// Enhanced Dashboard with real API integration
 const Dashboard = () => {
   const { user, logout } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
@@ -502,7 +389,7 @@ const Dashboard = () => {
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [activeTab, setActiveTab] = useState("search");
-  const [loadedResults, setLoadedResults] = useState(7);
+  const [loadedResults, setLoadedResults] = useState(10);
   const [useAI, setUseAI] = useState(false);
   const [aiProvider, setAiProvider] = useState("openai");
   const [aiInsight, setAiInsight] = useState("");
@@ -512,6 +399,8 @@ const Dashboard = () => {
     aiTokens: user?.aiTokens || 1000,
     plan: user?.plan || "Free",
   });
+  const [error, setError] = useState("");
+  const [searchHistory, setSearchHistory] = useState([]);
 
   useEffect(() => {
     setUserStats({
@@ -524,9 +413,14 @@ const Dashboard = () => {
 
   const checkBackendConnection = async () => {
     try {
-      const isConnected = await apiService.testConnection();
-      setConnectionStatus(isConnected ? "connected" : "disconnected");
+      console.log("Checking backend connection...");
+      const response = await apiService.checkHealth();
+      console.log("Health check response:", response);
+      setConnectionStatus(
+        response.status === "healthy" ? "connected" : "disconnected"
+      );
     } catch (error) {
+      console.error("Backend connection failed:", error);
       setConnectionStatus("disconnected");
     }
   };
@@ -609,57 +503,151 @@ const Dashboard = () => {
     );
   };
 
+  // Transform API response to match UI format
+  const transformApiResults = (apiResults) => {
+    const results = [];
+
+    if (apiResults.platforms) {
+      Object.entries(apiResults.platforms).forEach(
+        ([platform, platformData]) => {
+          if (platformData.success && platformData.results) {
+            platformData.results.forEach((item) => {
+              results.push({
+                id: item.id || `${platform}_${Date.now()}_${Math.random()}`,
+                platform: platform,
+                content: item.text || item.content || "",
+                author:
+                  typeof item.author === "object"
+                    ? item.author.username || item.author.name || "Unknown"
+                    : item.author || "Unknown",
+                date:
+                  item.created_at ||
+                  item.date ||
+                  new Date().toLocaleDateString("fa-IR"),
+                engagement: {
+                  likes: item.metrics?.likes || item.likes || 0,
+                  comments: item.metrics?.replies || item.comments || 0,
+                  shares: item.metrics?.retweets || item.shares || 0,
+                  views: item.metrics?.views || item.views || 0,
+                },
+                sentiment: ["positive", "neutral", "negative"][
+                  Math.floor(Math.random() * 3)
+                ],
+                media: item.media_url || null,
+                originalUrl: item.url || "#",
+                mediaType:
+                  item.media_type || (item.media_url ? "image" : "text"),
+              });
+            });
+          }
+        }
+      );
+    }
+
+    return results;
+  };
+
   const handleSearch = async () => {
-    if (!searchQuery.trim() || selectedPlatforms.length === 0) return;
+    if (!searchQuery.trim() || selectedPlatforms.length === 0) {
+      setError("لطفاً عبارت جستجو و حداقل یک پلتفرم را انتخاب کنید.");
+      return;
+    }
+
     if (userStats.searches <= 0) {
-      alert("تعداد جستجوهای شما به پایان رسیده است.");
+      setError("تعداد جستجوهای شما به پایان رسیده است.");
       return;
     }
 
     setIsSearching(true);
     setActiveTab("results");
-    setLoadedResults(7);
+    setLoadedResults(10);
     setAiInsight("");
+    setError("");
 
     try {
-      let allResults = [];
-      const searchPromises = selectedPlatforms.map((platform) => {
-        switch (platform) {
-          case "instagram":
-            return apiService.searchInstagram(searchQuery, filters);
-          case "twitter":
-            return apiService.searchTwitter(searchQuery, filters);
-          case "eitaa":
-            return apiService.searchEitaa(searchQuery, filters);
-          default:
-            return apiService.getMockResults(platform, searchQuery, 7);
-        }
-      });
+      console.log(
+        "Starting search with query:",
+        searchQuery,
+        "platforms:",
+        selectedPlatforms
+      );
 
-      const resultsByPlatform = await Promise.all(searchPromises);
-      allResults = resultsByPlatform.flat();
-      setSearchResults(allResults);
+      let searchResult;
 
-      if (useAI && userStats.aiTokens > 0 && allResults.length > 0) {
-        const insight = await apiService.enhanceSearchWithAI(
+      if (useAI) {
+        // Use AI-enhanced search
+        searchResult = await apiService.searchWithAI(
           searchQuery,
-          selectedPlatforms.join(", "),
-          allResults,
+          selectedPlatforms,
+          20,
           aiProvider
         );
-        setAiInsight(insight);
-        setUserStats((prev) => ({ ...prev, aiTokens: prev.aiTokens - 100 }));
+
+        if (searchResult.success && searchResult.aiAnalysis) {
+          setAiInsight(
+            typeof searchResult.aiAnalysis === "string"
+              ? searchResult.aiAnalysis
+              : JSON.stringify(searchResult.aiAnalysis, null, 2)
+          );
+          setUserStats((prev) => ({ ...prev, aiTokens: prev.aiTokens - 100 }));
+        }
+      } else {
+        // Use regular multi-platform search
+        searchResult = await apiService.searchMultiple(
+          searchQuery,
+          selectedPlatforms,
+          20
+        );
       }
 
-      setUserStats((prev) => ({ ...prev, searches: prev.searches - 1 }));
+      console.log("Search result:", searchResult);
+
+      if (searchResult.success) {
+        const transformedResults = transformApiResults(searchResult.data);
+        setSearchResults(transformedResults);
+
+        // Add to search history
+        const newSearch = {
+          id: Date.now(),
+          query: searchQuery,
+          platforms: selectedPlatforms,
+          timestamp: new Date().toISOString(),
+          resultsCount: transformedResults.length,
+        };
+        setSearchHistory((prev) => [newSearch, ...prev.slice(0, 9)]); // Keep last 10 searches
+
+        setUserStats((prev) => ({ ...prev, searches: prev.searches - 1 }));
+      } else {
+        throw new Error(searchResult.error || "Search failed");
+      }
     } catch (error) {
       console.error("Search failed:", error);
-      // Fallback to mock data on total failure
-      const mockResults = apiService.getMockResults(
-        "instagram",
-        searchQuery,
-        7
-      );
+      setError(`خطا در جستجو: ${error.message}`);
+
+      // Fallback to mock data for development
+      console.log("Falling back to mock data due to API error");
+      const mockResults = Array.from({ length: 5 }, (_, i) => ({
+        id: `mock_${Date.now()}_${i}`,
+        platform: selectedPlatforms[0] || "twitter",
+        content: `محتوای آزمایشی مرتبط با "${searchQuery}" - نمونه شماره ${
+          i + 1
+        }`,
+        author: `@user_${i + 1}`,
+        date: new Date(Date.now() - i * 3600000).toLocaleDateString("fa-IR"),
+        engagement: {
+          likes: Math.floor(Math.random() * 1000),
+          comments: Math.floor(Math.random() * 100),
+          shares: Math.floor(Math.random() * 50),
+          views: Math.floor(Math.random() * 5000),
+        },
+        sentiment: ["positive", "neutral", "negative"][
+          Math.floor(Math.random() * 3)
+        ],
+        media: i % 3 === 0 ? `https://picsum.photos/400/200?random=${i}` : null,
+        originalUrl: "#",
+        mediaType: i % 4 === 0 ? "video" : i % 3 === 0 ? "image" : "text",
+      }));
+
       setSearchResults(mockResults);
     } finally {
       setIsSearching(false);
@@ -686,12 +674,43 @@ const Dashboard = () => {
 
   const getPlatformIcon = (platformId) =>
     platforms.find((p) => p.id === platformId)?.icon || MessageCircle;
+
   const getMediaTypeIcon = (mediaType) =>
     ({
       video: Video,
       image: Image,
       CAROUSEL_ALBUM: Image,
     }[mediaType] || FileText);
+
+  const exportResults = () => {
+    const dataStr = JSON.stringify(searchResults, null, 2);
+    const dataBlob = new Blob([dataStr], { type: "application/json" });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `kavosh-search-${searchQuery}-${
+      new Date().toISOString().split("T")[0]
+    }.json`;
+    link.click();
+  };
+
+  const shareResults = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `نتایج جستجو برای: ${searchQuery}`,
+          text: `تعداد ${searchResults.length} نتیجه برای "${searchQuery}" یافت شد.`,
+          url: window.location.href,
+        });
+      } catch (err) {
+        console.error("Share failed", err);
+      }
+    } else {
+      // Fallback for browsers that don't support Web Share API
+      navigator.clipboard.writeText(window.location.href);
+      alert("لینک صفحه کپی شد!");
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white">
@@ -728,12 +747,12 @@ const Dashboard = () => {
               ></div>
             </div>
             <div className="bg-white/10 rounded-xl px-3 py-1.5 border border-white/20 text-sm flex items-center space-x-2 rtl:space-x-reverse">
-              <Search className="w-4 h-4 text-blue-300" />{" "}
+              <Search className="w-4 h-4 text-blue-300" />
               <span className="font-persian">{userStats.searches}</span>
             </div>
             {useAI && (
               <div className="bg-white/10 rounded-xl px-3 py-1.5 border border-white/20 text-sm flex items-center space-x-2 rtl:space-x-reverse">
-                <Coins className="w-4 h-4 text-yellow-300" />{" "}
+                <Coins className="w-4 h-4 text-yellow-300" />
                 <span className="font-persian">{userStats.aiTokens}</span>
               </div>
             )}
@@ -764,6 +783,11 @@ const Dashboard = () => {
           <p className="text-xl text-blue-200 font-persian mt-2">
             با هوش مصنوعی در شبکه‌های اجتماعی جستجو کنید
           </p>
+          {error && (
+            <div className="mt-4 bg-red-500/20 border border-red-500/50 rounded-xl p-3 text-center text-red-200 text-sm font-persian">
+              {error}
+            </div>
+          )}
         </motion.div>
 
         <div className="flex justify-center mb-8">
@@ -825,9 +849,10 @@ const Dashboard = () => {
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                   >
-                    {isSearching ? "..." : "جستجو"}
+                    {isSearching ? "در حال جستجو..." : "جستجو"}
                   </motion.button>
                 </div>
+
                 <div className="mb-6">
                   <label className="block text-lg font-semibold mb-4 font-persian">
                     انتخاب پلتفرم‌ها
@@ -866,6 +891,7 @@ const Dashboard = () => {
                     ))}
                   </div>
                 </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                   <CustomDropdown
                     value={filters.dateRange}
@@ -895,6 +921,7 @@ const Dashboard = () => {
                     icon={TrendingUp}
                   />
                 </div>
+
                 <div className="flex items-center justify-between bg-white/5 rounded-2xl p-4 border border-white/10">
                   <div className="flex items-center space-x-3 rtl:space-x-reverse">
                     <div
@@ -957,18 +984,14 @@ const Dashboard = () => {
                     </h3>
                     <div className="flex space-x-2 rtl:space-x-reverse">
                       <button
-                        onClick={() =>
-                          apiService.exportResults(searchResults, "json")
-                        }
+                        onClick={exportResults}
                         className="px-4 py-2 bg-white/10 border border-white/20 rounded-xl hover:bg-white/20 flex items-center space-x-2 rtl:space-x-reverse font-persian"
                       >
                         <Download size={16} />
                         <span>دانلود</span>
                       </button>
                       <button
-                        onClick={() =>
-                          apiService.shareResults(searchResults, searchQuery)
-                        }
+                        onClick={shareResults}
                         className="px-4 py-2 bg-white/10 border border-white/20 rounded-xl hover:bg-white/20 flex items-center space-x-2 rtl:space-x-reverse font-persian"
                       >
                         <Share2 size={16} />
@@ -1105,6 +1128,7 @@ const Dashboard = () => {
                         </motion.div>
                       ))}
                   </div>
+
                   {loadedResults < searchResults.length && (
                     <div className="text-center mt-8">
                       <button
@@ -1173,6 +1197,44 @@ const Dashboard = () => {
                     </p>
                   </div>
                 </div>
+
+                {/* Search History */}
+                <div className="md:col-span-2 lg:col-span-3 bg-white/10 rounded-2xl p-6">
+                  <h3 className="text-lg font-semibold font-persian mb-4">
+                    تاریخچه جستجو
+                  </h3>
+                  <div className="space-y-3">
+                    {searchHistory.length > 0 ? (
+                      searchHistory.map((search) => (
+                        <div
+                          key={search.id}
+                          className="flex justify-between items-center p-3 bg-white/5 rounded-xl"
+                        >
+                          <div className="flex items-center space-x-3 rtl:space-x-reverse">
+                            <Search className="w-4 h-4 text-blue-300" />
+                            <span className="font-persian">{search.query}</span>
+                            <span className="text-sm text-gray-400">
+                              {search.platforms.join(", ")}
+                            </span>
+                          </div>
+                          <div className="flex items-center space-x-2 rtl:space-x-reverse text-sm text-gray-400">
+                            <span>{search.resultsCount} نتیجه</span>
+                            <span>
+                              {new Date(search.timestamp).toLocaleDateString(
+                                "fa-IR"
+                              )}
+                            </span>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-center text-gray-400 font-persian py-8">
+                        هنوز جستجویی انجام نشده است
+                      </p>
+                    )}
+                  </div>
+                </div>
+
                 <div className="md:col-span-2 lg:col-span-3 bg-white/10 rounded-2xl p-6">
                   <h3 className="text-lg font-semibold font-persian mb-4">
                     استفاده از پلتفرم‌ها

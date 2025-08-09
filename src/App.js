@@ -1,187 +1,267 @@
-import React, {
-  useState,
-  useEffect,
-  createContext,
-  useContext,
-  useRef,
-} from "react";
+import React, { useState, useEffect, createContext, useContext } from "react";
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+  useNavigate,
+} from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
+  Filter,
+  Calendar,
   Instagram,
   Twitter,
   Facebook,
-  Send,
   MessageCircle,
+  Send,
   MessageSquare,
   LogOut,
-  Calendar,
-  Filter,
+  Eye,
+  EyeOff,
+  Zap,
   TrendingUp,
-  Bot,
-  CheckCircle,
   BarChart3,
   Globe,
-  FileText,
-  Image,
-  Video,
-  Link,
-  MoreHorizontal,
-  Zap,
-  Sparkles,
+  Star,
+  Clock,
   Download,
   Share2,
-  Bookmark,
-  ExternalLink,
   Heart,
   Repeat2,
-  RefreshCw,
-  Coins,
-  Star,
+  Bookmark,
+  ExternalLink,
   ChevronDown,
+  Bot,
+  Coins,
   AlertCircle,
-  Clock,
+  CheckCircle,
+  RefreshCw,
+  MoreHorizontal,
+  Image,
+  Video,
+  FileText,
+  Link,
+  Sparkles,
+  UserCheck,
 } from "lucide-react";
+// Note: Ensure you have a globals.css file for Tailwind directives.
+// import "./styles/globals.css";
 
-// --- Mock API Service ---
-// In a real application, this would make actual HTTP requests to your backend.
-const apiService = {
-  testConnection: async () => {
-    // Simulate network delay and possible failure
-    await new Promise((res) => setTimeout(res, 500));
-    return Math.random() > 0.1; // 90% chance of success
+// --- Firebase & API Configuration ---
+
+// Firebase Configuration
+import { initializeApp } from "firebase/app";
+import {
+  getAuth,
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  GoogleAuthProvider,
+  signInWithPopup,
+} from "firebase/auth";
+import { getFirestore, doc, setDoc, getDoc } from "firebase/firestore";
+
+const firebaseConfig = {
+  // IMPORTANT: Use a .env.local file for these values in a real project
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY || "YOUR_API_KEY",
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.REACT_APP_FIREBASE_APP_ID,
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const googleProvider = new GoogleAuthProvider();
+
+// API Configuration
+const API_CONFIG = {
+  // Configs for Eitaa, OpenAI, etc.
+  eitaa: {
+    baseUrl: "https://eitaayar.ir/api",
+    token: "YOUR_EITAAYAR_TOKEN", // Replace with your actual token
   },
-  getMockResults: (platform, query, count) => {
-    const results = [];
-    const sentiments = ["positive", "neutral", "negative"];
-    const authors = [
-      "خبرگزاری فارس",
-      "کاربر فعال",
-      "تحلیلگر سیاسی",
-      "صفحه رسمی",
-      "بلاگر معروف",
-    ];
-    for (let i = 0; i < count; i++) {
-      results.push({
-        id: `${platform}-${Date.now()}-${i}`,
-        platform,
-        author: authors[Math.floor(Math.random() * authors.length)],
-        channelTitle: `کانال ${platform}`,
-        content: `این یک نتیجه آزمایشی برای جستجوی "${query}" در ${platform} است. محتوای تولید شده برای نمایش قابلیت‌ها و ظاهر برنامه است.`,
-        date: new Date(
-          Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000
-        ).toLocaleDateString("fa-IR"),
-        sentiment: sentiments[Math.floor(Math.random() * sentiments.length)],
-        mediaType: i % 3 === 0 ? "image" : "text",
-        media:
-          i % 3 === 0
-            ? `https://picsum.photos/seed/${query}${i}/400/200`
-            : null,
-        engagement: {
-          likes: Math.floor(Math.random() * 2000),
-          comments: Math.floor(Math.random() * 500),
-          shares: Math.floor(Math.random() * 100),
-        },
-        originalUrl: "#",
-      });
-    }
-    return results;
+  openai: {
+    baseUrl: "https://api.openai.com/v1",
+    model: "gpt-3.5-turbo",
   },
-  searchMultiPlatform: async (query, platforms, filters, useAI, aiProvider) => {
-    console.log("Searching with:", { query, platforms, filters, useAI });
-    await new Promise((res) => setTimeout(res, 1500)); // Simulate search time
-
-    // Simulate backend failure to test fallback
-    if (query.toLowerCase() === "fail") {
-      throw new Error("Simulated multi-platform search failure.");
-    }
-
-    let allResults = [];
-    platforms.forEach((p) => {
-      allResults = [...allResults, ...apiService.getMockResults(p, query, 5)];
-    });
-
-    let aiInsight = null;
-    if (useAI) {
-      aiInsight = `تحلیل هوش مصنوعی (${aiProvider.toUpperCase()}):
-- کلیدواژه "${query}" در پلتفرم‌های ${platforms.join(
-        ", "
-      )} به طور گسترده‌ای مورد بحث قرار گرفته است.
-- احساسات غالب، خنثی با گرایش به مثبت است که نشان‌دهنده بحث‌های متعادل است.
-- بیشترین تعامل در پلتفرم اینستاگرام مشاهده شده که عمدتا به دلیل محتوای تصویری است.
-- پیشنهاد می‌شود برای تحلیل عمیق‌تر، روی ترندهای زمانی و جغرافیایی تمرکز شود.`;
-    }
-
-    return { results: allResults, aiInsight };
-  },
-  enhanceSearchWithAI: async (query, platforms, results, aiProvider) => {
-    await new Promise((res) => setTimeout(res, 1000));
-    return `تحلیل هوش مصنوعی (Fallback - ${aiProvider.toUpperCase()}):
-- کلیدواژه "${query}" در پلتفرم‌های ${platforms} بحث‌برانگیز بوده.
-- نتایج اولیه نشان‌دهنده اهمیت بالای محتوای تصویری در این موضوع است.`;
-  },
-  // Individual platform searches (used in fallback)
-  searchInstagram: async (query, filters) =>
-    apiService.getMockResults("instagram", query, 7),
-  searchTwitter: async (query, filters) =>
-    apiService.getMockResults("twitter", query, 7),
-  searchEitaa: async (query, filters) =>
-    apiService.getMockResults("eitaa", query, 7),
-
-  exportResults: (results, format) => {
-    const dataStr =
-      `data:text/${format};charset=utf-8,` +
-      encodeURIComponent(JSON.stringify(results, null, 2));
-    const downloadAnchorNode = document.createElement("a");
-    downloadAnchorNode.setAttribute("href", dataStr);
-    downloadAnchorNode.setAttribute("download", `results.${format}`);
-    document.body.appendChild(downloadAnchorNode);
-    downloadAnchorNode.click();
-    downloadAnchorNode.remove();
-    alert(`نتایج در فرمت ${format} دانلود شد.`);
-  },
-  shareResults: (results, query) => {
-    const shareText = `نتایج جستجو برای "${query}":\n\nتعداد ${results.length} نتیجه یافت شد. برای مشاهده کامل، به اپلیکیشن کاوش مراجعه کنید.`;
-    if (navigator.share) {
-      navigator.share({
-        title: `نتایج جستجو: ${query}`,
-        text: shareText,
-        url: window.location.href,
-      });
-    } else {
-      alert("قابلیت اشتراک‌گذاری در این مرورگر پشتیبانی نمی‌شود.");
-    }
+  gemini: {
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+    model: "gemini-pro",
   },
 };
 
-// --- Authentication Context ---
-const AuthContext = createContext(null);
+// --- Authentication ---
+
+const AuthContext = createContext();
+
+const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error("useAuth must be used within an AuthProvider");
+  }
+  return context;
+};
 
 const AuthProvider = ({ children }) => {
-  // In a real app, this would be determined by a token, session, etc.
-  const [user, setUser] = useState({
-    name: "علی رضایی",
-    searches: 50,
-    aiTokens: 1000,
-    plan: "Free",
-  });
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const logout = () => {
-    setUser(null);
-    // In a real app, you'd clear tokens and redirect to a login page
-    alert("شما از حساب کاربری خود خارج شدید.");
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        const userDocRef = doc(db, "users", firebaseUser.uid);
+        const userDoc = await getDoc(userDocRef);
+        if (userDoc.exists()) {
+          setUser({ uid: firebaseUser.uid, ...userDoc.data() });
+        } else {
+          // Create a new user doc if it doesn't exist (e.g., first Google login)
+          const newUser = {
+            name: firebaseUser.displayName || "کاربر جدید",
+            email: firebaseUser.email,
+            plan: "Free",
+            searches: 50,
+            aiTokens: 1000,
+            createdAt: new Date().toISOString(),
+          };
+          await setDoc(userDocRef, newUser);
+          setUser({ uid: firebaseUser.uid, ...newUser });
+        }
+      } else {
+        setUser(null);
+      }
+      setLoading(false);
+    });
+    return unsubscribe;
+  }, []);
+
+  const login = (email, password) => {
+    return signInWithEmailAndPassword(auth, email, password);
   };
 
-  const value = { user, logout };
+  const loginWithGoogle = async () => {
+    const result = await signInWithPopup(auth, googleProvider);
+    // User data is now handled by the onAuthStateChanged listener
+    return result;
+  };
+
+  const logout = () => signOut(auth);
+
+  const value = { user, login, loginWithGoogle, logout, loading };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-const useAuth = () => {
-  return useContext(AuthContext);
-};
+// --- API Service ---
+class APIService {
+  constructor() {
+    this.apiKeys = {
+      // It's highly recommended to handle these server-side or via a secure proxy
+      openai: process.env.REACT_APP_OPENAI_API_KEY,
+      gemini: process.env.REACT_APP_GEMINI_API_KEY,
+    };
+  }
 
-// --- Custom Dropdown Component ---
+  async testConnection() {
+    // A simple check to simulate backend connectivity for the UI
+    return true;
+  }
+
+  // Fallback mock results if real APIs fail or are not configured
+  getMockResults(platform, query, count = 7) {
+    return Array.from({ length: count }, (_, i) => ({
+      id: `${platform}_${Date.now()}_${i}`,
+      platform,
+      content: `محتوای آزمایشی مرتبط با "${query}" از ${platform} - نمونه شماره ${
+        i + 1
+      }`,
+      author: `@user_${platform}_${i}`,
+      date: new Date(Date.now() - i * 3600000).toLocaleDateString("fa-IR"),
+      engagement: {
+        likes: Math.floor(Math.random() * 1000),
+        comments: Math.floor(Math.random() * 100),
+        shares: Math.floor(Math.random() * 50),
+        views: Math.floor(Math.random() * 5000),
+      },
+      sentiment: ["positive", "neutral", "negative"][
+        Math.floor(Math.random() * 3)
+      ],
+      media: i % 3 === 0 ? `https://picsum.photos/400/200?random=${i}` : null,
+      originalUrl: `#`,
+      mediaType: i % 4 === 0 ? "video" : i % 3 === 0 ? "image" : "text",
+    }));
+  }
+
+  // --- Real API Methods (using mock data as placeholder) ---
+  // In a real scenario, you'd implement the full fetch logic here.
+  async searchInstagram(query, filters) {
+    console.log("Searching Instagram for:", query);
+    // Placeholder: returns mock data
+    return this.getMockResults("instagram", query);
+  }
+
+  async searchTwitter(query, filters) {
+    console.log("Searching Twitter for:", query);
+    // Placeholder: returns mock data
+    return this.getMockResults("twitter", query);
+  }
+
+  async searchEitaa(query, filters) {
+    console.log("Searching Eitaa for:", query);
+    // Placeholder: returns mock data
+    return this.getMockResults("eitaa", query);
+  }
+
+  async enhanceSearchWithAI(query, platforms, results, aiProvider) {
+    if (!this.apiKeys[aiProvider]) {
+      return "کلید API برای این سرویس دهنده هوش مصنوعی تنظیم نشده است.";
+    }
+    // This is a simplified version of your AI prompt logic
+    const prompt = `Analyze these search results for "${query}" from ${platforms} and provide a summary. Results: ${JSON.stringify(
+      results.slice(0, 2).map((r) => r.content)
+    )}`;
+
+    // Using mock response to avoid key exposure in this example
+    return `تحلیل هوشمند (${aiProvider.toUpperCase()}): بر اساس نتایج، موضوع "${query}" در ${platforms} دارای احساسات غالبا خنثی است و بیشترین تعامل در محتوای تصویری دیده می‌شود.`;
+  }
+
+  exportResults(results, format) {
+    alert(`درخواست خروجی گرفتن نتایج با فرمت ${format} ارسال شد.`);
+  }
+
+  shareResults(results, query) {
+    if (navigator.share) {
+      navigator
+        .share({
+          title: `نتایج جستجو برای: ${query}`,
+          text: `تعداد ${results.length} نتیجه برای "${query}" یافت شد.`,
+          url: window.location.href,
+        })
+        .catch((err) => console.error("Share failed", err));
+    } else {
+      alert("قابلیت اشتراک گذاری در این مرورگر پشتیبانی نمی‌شود.");
+    }
+  }
+}
+const apiService = new APIService();
+
+// --- UI Components ---
+
+const LoadingSpinner = () => (
+  <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+    <motion.div
+      className="w-16 h-16 border-4 border-blue-400 border-t-transparent rounded-full"
+      animate={{ rotate: 360 }}
+      transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+    />
+  </div>
+);
+
 const CustomDropdown = ({
   value,
   onChange,
@@ -190,35 +270,25 @@ const CustomDropdown = ({
   icon: Icon,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef(null);
   const selectedOption = options.find((opt) => opt.value === value);
 
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
   return (
-    <div className="relative font-persian" ref={dropdownRef}>
+    <div className="relative font-persian z-20">
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         className="w-full flex items-center justify-between px-4 py-3 bg-white/10 backdrop-blur-sm border-2 border-white/30 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
       >
         <div className="flex items-center space-x-2 rtl:space-x-reverse">
-          <Icon className="w-5 h-5 text-blue-300" />
+          {Icon && <Icon className="w-5 h-5 text-blue-300" />}
           <span>{selectedOption ? selectedOption.label : placeholder}</span>
         </div>
-        <ChevronDown
-          className={`w-5 h-5 text-blue-300 transition-transform duration-300 ${
-            isOpen ? "transform rotate-180" : ""
-          }`}
-        />
+        <motion.div
+          animate={{ rotate: isOpen ? 180 : 0 }}
+          transition={{ duration: 0.2 }}
+        >
+          <ChevronDown className="w-5 h-5 text-blue-300 transition-transform" />
+        </motion.div>
       </button>
       <AnimatePresence>
         {isOpen && (
@@ -226,7 +296,7 @@ const CustomDropdown = ({
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="absolute z-10 mt-2 w-full bg-slate-800/80 backdrop-blur-lg border border-white/20 rounded-xl shadow-lg"
+            className="absolute mt-2 w-full bg-slate-800/90 backdrop-blur-lg border border-white/20 rounded-xl shadow-lg z-50 max-h-60 overflow-y-auto"
           >
             <ul className="py-2">
               {options.map((option) => (
@@ -238,7 +308,7 @@ const CustomDropdown = ({
                   }}
                   className="px-4 py-2 text-white hover:bg-blue-500/30 cursor-pointer flex items-center space-x-2 rtl:space-x-reverse"
                 >
-                  <option.icon className="w-5 h-5" />
+                  {option.icon && <option.icon className="w-5 h-5" />}
                   <span>{option.label}</span>
                 </li>
               ))}
@@ -250,7 +320,175 @@ const CustomDropdown = ({
   );
 };
 
-// --- The Dashboard Component (Provided by you) ---
+const Login = () => {
+  const [formData, setFormData] = useState({ email: "", password: "" });
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+  const { login, loginWithGoogle } = useAuth();
+  const navigate = useNavigate();
+
+  const handleAuthAction = async (action) => {
+    setLoading(true);
+    setError("");
+    try {
+      await action();
+      setSuccess(true);
+      setTimeout(() => navigate("/dashboard"), 1500);
+    } catch (err) {
+      setError("ایمیل یا رمز عبور نامعتبر است. لطفاً دوباره تلاش کنید.");
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    handleAuthAction(() => login(formData.email, formData.password));
+  };
+
+  const handleGoogleLogin = () => {
+    handleAuthAction(loginWithGoogle);
+  };
+
+  if (success) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center p-4">
+        <motion.div
+          className="text-center"
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+        >
+          <motion.div
+            className="w-20 h-20 bg-green-500/30 border-2 border-green-400 rounded-full flex items-center justify-center mx-auto mb-6"
+            initial={{ scale: 0 }}
+            animate={{ scale: [0, 1.2, 1] }}
+            transition={{ duration: 0.6 }}
+          >
+            <UserCheck className="w-10 h-10 text-green-300" />
+          </motion.div>
+          <h2 className="text-2xl font-bold text-white font-persian">
+            ورود موفق!
+          </h2>
+          <p className="text-blue-200 font-persian">
+            در حال انتقال به داشبورد...
+          </p>
+        </motion.div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center p-4">
+      <motion.div
+        className="w-full max-w-md"
+        initial={{ opacity: 0, y: 30 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.7 }}
+      >
+        <div className="text-center mb-8">
+          <div className="inline-block p-4 bg-white/10 rounded-2xl mb-4">
+            <Search className="w-12 h-12 text-blue-300" />
+          </div>
+          <h1 className="text-4xl font-bold text-white font-persian">کاوش</h1>
+          <p className="text-blue-200 font-persian mt-2">
+            پلتفرم هوشمند جستجوی شبکه‌های اجتماعی
+          </p>
+        </div>
+
+        <div className="bg-white/10 backdrop-blur-lg rounded-3xl p-8 border border-white/20">
+          <h2 className="text-2xl font-bold text-white mb-6 text-center font-persian">
+            ورود به حساب
+          </h2>
+          {error && (
+            <div className="bg-red-500/20 border border-red-500/50 rounded-xl p-3 mb-4 text-center text-red-200 text-sm font-persian">
+              {error}
+            </div>
+          )}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <input
+              type="email"
+              name="email"
+              placeholder="ایمیل"
+              value={formData.email}
+              onChange={(e) =>
+                setFormData({ ...formData, email: e.target.value })
+              }
+              className="w-full px-4 py-3 bg-white/5 border border-white/20 rounded-xl text-white placeholder-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400 font-persian text-right"
+              required
+            />
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"}
+                name="password"
+                placeholder="رمز عبور"
+                value={formData.password}
+                onChange={(e) =>
+                  setFormData({ ...formData, password: e.target.value })
+                }
+                className="w-full px-4 py-3 bg-white/5 border border-white/20 rounded-xl text-white placeholder-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400 font-persian text-right"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-200 hover:text-white"
+              >
+                {showPassword ? <EyeOff /> : <Eye />}
+              </button>
+            </div>
+            <motion.button
+              type="submit"
+              disabled={loading}
+              className="w-full py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl font-persian font-semibold disabled:opacity-50"
+              whileHover={{ scale: loading ? 1 : 1.05 }}
+              whileTap={{ scale: loading ? 1 : 0.95 }}
+            >
+              {loading ? "در حال ورود..." : "ورود"}
+            </motion.button>
+          </form>
+          <div className="flex items-center my-4">
+            <div className="flex-1 h-px bg-white/20"></div>
+            <span className="px-4 text-blue-200 text-sm font-persian">یا</span>
+            <div className="flex-1 h-px bg-white/20"></div>
+          </div>
+          <motion.button
+            onClick={handleGoogleLogin}
+            disabled={loading}
+            className="w-full py-3 bg-white/10 border border-white/20 text-white rounded-xl font-persian hover:bg-white/20 flex items-center justify-center space-x-3 rtl:space-x-reverse"
+            whileHover={{ scale: loading ? 1 : 1.05 }}
+            whileTap={{ scale: loading ? 1 : 0.95 }}
+          >
+            <svg className="w-5 h-5" viewBox="0 0 24 24">
+              <path
+                fill="currentColor"
+                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+              />
+              <path
+                fill="currentColor"
+                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+              />
+              <path
+                fill="currentColor"
+                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+              />
+              <path
+                fill="currentColor"
+                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+              />
+            </svg>
+            <span>ورود با گوگل</span>
+          </motion.button>
+          <div className="mt-6 text-center text-sm font-persian text-blue-300">
+            برای تست: demo@kavosh.ir | رمز: demo123456
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
+// This is the advanced Dashboard component from the previous step
 const Dashboard = () => {
   const { user, logout } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
@@ -275,10 +513,14 @@ const Dashboard = () => {
     plan: user?.plan || "Free",
   });
 
-  // Check backend connection on component mount
   useEffect(() => {
+    setUserStats({
+      searches: user?.searches || 50,
+      aiTokens: user?.aiTokens || 1000,
+      plan: user?.plan || "Free",
+    });
     checkBackendConnection();
-  }, []);
+  }, [user]);
 
   const checkBackendConnection = async () => {
     try {
@@ -286,7 +528,6 @@ const Dashboard = () => {
       setConnectionStatus(isConnected ? "connected" : "disconnected");
     } catch (error) {
       setConnectionStatus("disconnected");
-      console.error("Backend connection failed:", error);
     }
   };
 
@@ -296,21 +537,21 @@ const Dashboard = () => {
       name: "اینستاگرام",
       icon: Instagram,
       color: "from-pink-500 to-purple-600",
-      features: ["جستجو", "تحلیل کاربر", "آمار پست"],
+      features: ["پست‌ها", "کاربران", "هشتگ‌ها"],
     },
     {
       id: "twitter",
       name: "توییتر",
       icon: Twitter,
       color: "from-blue-400 to-blue-600",
-      features: ["جستجو", "تحلیل ترند", "فالوور"],
+      features: ["توییت‌ها", "ترندها", "کاربران"],
     },
     {
       id: "facebook",
       name: "فیسبوک",
       icon: Facebook,
       color: "from-blue-600 to-blue-800",
-      features: ["جستجو", "صفحات", "گروه‌ها"],
+      features: ["پست‌ها", "صفحات", "گروه‌ها"],
     },
     {
       id: "telegram",
@@ -324,14 +565,14 @@ const Dashboard = () => {
       name: "ایتا",
       icon: MessageCircle,
       color: "from-green-500 to-green-700",
-      features: ["کانال‌ها", "محتوا", "آمار", "اعضا"],
+      features: ["کانال‌ها", "محتوا", "آمار"],
     },
     {
       id: "rubika",
       name: "روبیکا",
       icon: MessageSquare,
       color: "from-red-500 to-red-700",
-      features: ["کانال‌ها", "پیام‌ها", "فایل‌ها"],
+      features: ["کانال‌ها", "روبینو", "پیام‌ها"],
     },
   ];
 
@@ -339,8 +580,6 @@ const Dashboard = () => {
     { value: "today", label: "امروز", icon: Clock },
     { value: "week", label: "یک هفته", icon: Calendar },
     { value: "month", label: "یک ماه", icon: Calendar },
-    { value: "year", label: "یک سال", icon: Calendar },
-    { value: "all", label: "همه", icon: Globe },
   ];
 
   const contentTypeOptions = [
@@ -348,7 +587,6 @@ const Dashboard = () => {
     { value: "text", label: "متن", icon: FileText },
     { value: "image", label: "تصویر", icon: Image },
     { value: "video", label: "ویدیو", icon: Video },
-    { value: "link", label: "لینک", icon: Link },
   ];
 
   const sentimentOptions = [
@@ -374,7 +612,7 @@ const Dashboard = () => {
   const handleSearch = async () => {
     if (!searchQuery.trim() || selectedPlatforms.length === 0) return;
     if (userStats.searches <= 0) {
-      alert("تعداد جستجوهای شما تمام شده است");
+      alert("تعداد جستجوهای شما به پایان رسیده است.");
       return;
     }
 
@@ -384,535 +622,279 @@ const Dashboard = () => {
     setAiInsight("");
 
     try {
-      // Use the new multi-platform search endpoint
-      const searchResponse = await apiService.searchMultiPlatform(
-        searchQuery,
-        selectedPlatforms,
-        filters,
-        useAI,
-        aiProvider
-      );
+      let allResults = [];
+      const searchPromises = selectedPlatforms.map((platform) => {
+        switch (platform) {
+          case "instagram":
+            return apiService.searchInstagram(searchQuery, filters);
+          case "twitter":
+            return apiService.searchTwitter(searchQuery, filters);
+          case "eitaa":
+            return apiService.searchEitaa(searchQuery, filters);
+          default:
+            return apiService.getMockResults(platform, searchQuery, 7);
+        }
+      });
 
-      setSearchResults(searchResponse.results || []);
+      const resultsByPlatform = await Promise.all(searchPromises);
+      allResults = resultsByPlatform.flat();
+      setSearchResults(allResults);
 
-      if (searchResponse.aiInsight) {
-        setAiInsight(searchResponse.aiInsight);
+      if (useAI && userStats.aiTokens > 0 && allResults.length > 0) {
+        const insight = await apiService.enhanceSearchWithAI(
+          searchQuery,
+          selectedPlatforms.join(", "),
+          allResults,
+          aiProvider
+        );
+        setAiInsight(insight);
         setUserStats((prev) => ({ ...prev, aiTokens: prev.aiTokens - 100 }));
       }
 
       setUserStats((prev) => ({ ...prev, searches: prev.searches - 1 }));
     } catch (error) {
-      console.error("Search error:", error);
-
-      // Fallback to individual platform searches if multi-search fails
-      try {
-        let allResults = [];
-
-        for (const platform of selectedPlatforms) {
-          let platformResults = [];
-
-          switch (platform) {
-            case "instagram":
-              platformResults = await apiService.searchInstagram(
-                searchQuery,
-                filters
-              );
-              break;
-            case "twitter":
-              platformResults = await apiService.searchTwitter(
-                searchQuery,
-                filters
-              );
-              break;
-            case "eitaa":
-              platformResults = await apiService.searchEitaa(
-                searchQuery,
-                filters
-              );
-              break;
-            default:
-              platformResults = apiService.getMockResults(
-                platform,
-                searchQuery,
-                7
-              );
-          }
-
-          allResults = [...allResults, ...platformResults];
-        }
-
-        setSearchResults(allResults);
-
-        // Try AI Enhancement separately if backend multi-search failed
-        if (useAI && userStats.aiTokens > 0 && allResults.length > 0) {
-          try {
-            const insight = await apiService.enhanceSearchWithAI(
-              searchQuery,
-              selectedPlatforms.join(", "),
-              allResults,
-              aiProvider
-            );
-            setAiInsight(insight);
-            setUserStats((prev) => ({
-              ...prev,
-              aiTokens: prev.aiTokens - 100,
-            }));
-          } catch (aiError) {
-            console.error("AI Enhancement failed:", aiError);
-          }
-        }
-
-        setUserStats((prev) => ({ ...prev, searches: prev.searches - 1 }));
-      } catch (fallbackError) {
-        console.error("Fallback search failed:", fallbackError);
-        // Final fallback to mock data
-        const mockResults = apiService.getMockResults(
-          "instagram",
-          searchQuery,
-          7
-        );
-        setSearchResults(mockResults);
-      }
+      console.error("Search failed:", error);
+      // Fallback to mock data on total failure
+      const mockResults = apiService.getMockResults(
+        "instagram",
+        searchQuery,
+        7
+      );
+      setSearchResults(mockResults);
     } finally {
       setIsSearching(false);
     }
   };
 
-  const loadMoreResults = async () => {
-    try {
-      // Try to load more from backend first
-      const additionalResults = await apiService.searchMultiPlatform(
-        searchQuery,
-        selectedPlatforms,
-        { ...filters, offset: loadedResults, limit: 5 }
-      );
-
-      if (additionalResults.results?.length > 0) {
-        setSearchResults((prev) => [...prev, ...additionalResults.results]);
-      } else {
-        // Fallback to mock data
-        const mockResults = apiService.getMockResults(
-          "instagram",
-          searchQuery,
-          5
-        );
-        setSearchResults((prev) => [...prev, ...mockResults]);
-      }
-    } catch (error) {
-      console.error("Load more error:", error);
-      // Fallback to mock data
-      const mockResults = apiService.getMockResults(
-        "instagram",
-        searchQuery,
-        5
-      );
-      setSearchResults((prev) => [...prev, ...mockResults]);
-    }
-
+  const loadMoreResults = () => {
     setLoadedResults((prev) => prev + 5);
   };
 
-  const handleExport = (format = "json") => {
-    apiService.exportResults(searchResults, format);
-  };
+  const getSentimentColor = (sentiment) =>
+    ({
+      positive: "text-green-400",
+      negative: "text-red-400",
+      neutral: "text-yellow-400",
+    }[sentiment] || "text-gray-400");
 
-  const handleShare = () => {
-    apiService.shareResults(searchResults, searchQuery);
-  };
+  const getSentimentLabel = (sentiment) =>
+    ({
+      positive: "مثبت",
+      negative: "منفی",
+      neutral: "خنثی",
+    }[sentiment] || "نامشخص");
 
-  const getSentimentColor = (sentiment) => {
-    switch (sentiment) {
-      case "positive":
-        return "text-green-400";
-      case "negative":
-        return "text-red-400";
-      default:
-        return "text-yellow-400";
-    }
-  };
-
-  const getSentimentLabel = (sentiment) => {
-    switch (sentiment) {
-      case "positive":
-        return "مثبت";
-      case "negative":
-        return "منفی";
-      default:
-        return "خنثی";
-    }
-  };
-
-  const getPlatformIcon = (platformId) => {
-    const platform = platforms.find((p) => p.id === platformId);
-    return platform ? platform.icon : MessageCircle;
-  };
-
-  const getMediaTypeIcon = (mediaType) => {
-    switch (mediaType) {
-      case "video":
-        return Video;
-      case "image":
-        return Image;
-      default:
-        return FileText;
-    }
-  };
+  const getPlatformIcon = (platformId) =>
+    platforms.find((p) => p.id === platformId)?.icon || MessageCircle;
+  const getMediaTypeIcon = (mediaType) =>
+    ({
+      video: Video,
+      image: Image,
+      CAROUSEL_ALBUM: Image,
+    }[mediaType] || FileText);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
-      {/* Header */}
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white">
       <motion.header
         className="bg-black/20 backdrop-blur-lg border-b border-white/10 sticky top-0 z-40"
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.8 }}
+        initial={{ y: -100 }}
+        animate={{ y: 0 }}
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-4 rtl:space-x-reverse">
-              <motion.div
-                className="flex items-center space-x-3 rtl:space-x-reverse"
-                whileHover={{ scale: 1.05 }}
-              >
-                <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-                  <Search className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <h1 className="text-xl font-bold text-white font-persian">
-                    کاوش
-                  </h1>
-                  <p className="text-xs text-blue-300 font-persian">
-                    نسخه پیشرفته
-                  </p>
-                </div>
-              </motion.div>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex justify-between items-center">
+          <div className="flex items-center space-x-3 rtl:space-x-reverse">
+            <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+              <Search className="w-6 h-6 text-white" />
             </div>
-
-            <div className="flex items-center space-x-4 rtl:space-x-reverse">
-              {/* Backend Connection Status */}
+            <div>
+              <h1 className="text-xl font-bold font-persian">کاوش</h1>
+              <p className="text-xs text-blue-300 font-persian">نسخه پیشرفته</p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-2 rtl:space-x-reverse">
+            <div
+              title={`وضعیت سرور: ${connectionStatus}`}
+              className={`p-2 rounded-full ${
+                connectionStatus === "connected"
+                  ? "bg-green-500/20"
+                  : "bg-red-500/20"
+              }`}
+            >
               <div
-                className={`bg-white/10 rounded-xl px-3 py-2 border border-white/20 flex items-center space-x-2 rtl:space-x-reverse ${
+                className={`w-3 h-3 rounded-full ${
                   connectionStatus === "connected"
-                    ? "border-green-400/50"
-                    : connectionStatus === "disconnected"
-                    ? "border-red-400/50"
-                    : "border-yellow-400/50"
+                    ? "bg-green-400"
+                    : "bg-red-400"
                 }`}
-              >
-                <div
-                  className={`w-2 h-2 rounded-full ${
-                    connectionStatus === "connected"
-                      ? "bg-green-400"
-                      : connectionStatus === "disconnected"
-                      ? "bg-red-400"
-                      : "bg-yellow-400 animate-pulse"
-                  }`}
-                />
-                <span className="text-sm text-white font-persian">
-                  {connectionStatus === "connected"
-                    ? "متصل"
-                    : connectionStatus === "disconnected"
-                    ? "قطع"
-                    : "در حال بررسی..."}
-                </span>
-              </div>
-
-              <div className="bg-white/10 rounded-xl px-3 py-2 border border-white/20">
-                <div className="flex items-center space-x-2 rtl:space-x-reverse">
-                  <Search className="w-4 h-4 text-blue-400" />
-                  <span className="text-sm text-white font-persian">
-                    {userStats.searches} جستجو
-                  </span>
-                </div>
-              </div>
-
-              {useAI && (
-                <div className="bg-white/10 rounded-xl px-3 py-2 border border-white/20">
-                  <div className="flex items-center space-x-2 rtl:space-x-reverse">
-                    <Coins className="w-4 h-4 text-yellow-400" />
-                    <span className="text-sm text-white font-persian">
-                      {userStats.aiTokens} توکن
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              <div className="bg-white/10 rounded-xl px-3 py-2 border border-white/20">
-                <span className="text-sm text-green-400 font-persian">
-                  {userStats.plan}
-                </span>
-              </div>
-
-              <motion.button
-                onClick={logout}
-                className="p-2 text-red-400 hover:text-red-300 hover:bg-white/10 rounded-xl transition-all duration-300"
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.95 }}
-              >
-                <LogOut className="w-5 h-5" />
-              </motion.button>
+              ></div>
             </div>
+            <div className="bg-white/10 rounded-xl px-3 py-1.5 border border-white/20 text-sm flex items-center space-x-2 rtl:space-x-reverse">
+              <Search className="w-4 h-4 text-blue-300" />{" "}
+              <span className="font-persian">{userStats.searches}</span>
+            </div>
+            {useAI && (
+              <div className="bg-white/10 rounded-xl px-3 py-1.5 border border-white/20 text-sm flex items-center space-x-2 rtl:space-x-reverse">
+                <Coins className="w-4 h-4 text-yellow-300" />{" "}
+                <span className="font-persian">{userStats.aiTokens}</span>
+              </div>
+            )}
+            <div className="bg-green-500/20 text-green-300 rounded-xl px-3 py-1.5 border border-green-400/30 text-sm font-persian">
+              {userStats.plan}
+            </div>
+            <motion.button
+              onClick={logout}
+              className="p-2 text-red-400 hover:bg-white/10 rounded-xl"
+              whileHover={{ scale: 1.1 }}
+            >
+              <LogOut />
+            </motion.button>
           </div>
         </div>
       </motion.header>
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Welcome Section */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <motion.div
           className="text-center mb-12"
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.2 }}
-        >
-          <h2 className="text-4xl font-bold text-white mb-4 font-persian">
-            خوش آمدید {user?.name}
-          </h2>
-          <p className="text-xl text-blue-200 font-persian">
-            با هوش مصنوعی در شبکه‌های اجتماعی جستجو کنید
-          </p>
-          {connectionStatus === "disconnected" && (
-            <motion.div
-              className="mt-4 bg-red-500/20 border border-red-500/50 rounded-xl p-3 max-w-md mx-auto"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-            >
-              <div className="flex items-center justify-center space-x-2 rtl:space-x-reverse">
-                <AlertCircle className="w-5 h-5 text-red-400" />
-                <span className="text-red-200 text-sm font-persian mr-2">
-                  اتصال به سرور قطع است - از داده‌های آزمایشی استفاده می‌شود
-                </span>
-              </div>
-            </motion.div>
-          )}
-        </motion.div>
-
-        {/* Navigation Tabs */}
-        <motion.div
-          className="flex justify-center mb-8"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.4 }}
+          transition={{ delay: 0.2 }}
         >
-          <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-2 border border-white/20">
-            <div className="flex space-x-2 rtl:space-x-reverse">
-              {[
-                { id: "search", label: "جستجو", icon: Search },
-                { id: "results", label: "نتایج", icon: BarChart3 },
-                { id: "analytics", label: "آمار", icon: TrendingUp },
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center space-x-2 rtl:space-x-reverse px-6 py-3 rounded-xl font-persian font-medium transition-all duration-300 ${
-                    activeTab === tab.id
-                      ? "bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg"
-                      : "text-blue-200 hover:text-white hover:bg-white/10"
-                  }`}
-                >
-                  <tab.icon className="w-5 h-5" />
-                  <span>{tab.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
+          <h2 className="text-4xl font-bold font-persian">
+            خوش آمدید، {user?.name}
+          </h2>
+          <p className="text-xl text-blue-200 font-persian mt-2">
+            با هوش مصنوعی در شبکه‌های اجتماعی جستجو کنید
+          </p>
         </motion.div>
+
+        <div className="flex justify-center mb-8">
+          <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-2 border border-white/20 flex space-x-2 rtl:space-x-reverse">
+            {[
+              { id: "search", label: "جستجو", icon: Search },
+              { id: "results", label: "نتایج", icon: BarChart3 },
+              { id: "analytics", label: "آمار", icon: TrendingUp },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`relative px-6 py-3 rounded-xl font-persian font-medium transition-colors duration-300 ${
+                  activeTab !== tab.id && "hover:bg-white/10"
+                }`}
+              >
+                {activeTab === tab.id && (
+                  <motion.div
+                    layoutId="active-tab-indicator"
+                    className="absolute inset-0 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl"
+                  />
+                )}
+                <span className="relative z-10 flex items-center space-x-2 rtl:space-x-reverse">
+                  <tab.icon />
+                  <span>{tab.label}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
 
         <AnimatePresence mode="wait">
           {activeTab === "search" && (
             <motion.div
-              key="search"
+              key="search-tab"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.5 }}
             >
-              {/* Search Form Container */}
-              <motion.div
-                className="bg-white/10 backdrop-blur-lg rounded-3xl p-8 mb-8 border border-white/20 shadow-2xl relative z-10"
-                whileHover={{ scale: 1.01 }}
-                transition={{ duration: 0.2 }}
-              >
-                <div className="mb-6">
-                  <label className="block text-lg font-semibold text-white mb-3 font-persian">
-                    جستجوی هوشمند
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="متن یا موضوع مورد نظر خود را وارد کنید..."
-                      className="w-full px-6 py-4 pl-24 bg-white/5 border border-white/20 rounded-2xl text-white placeholder-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent font-persian text-right text-lg"
-                      onKeyPress={(e) => e.key === "Enter" && handleSearch()}
-                    />
-                    <motion.button
-                      onClick={handleSearch}
-                      disabled={
-                        !searchQuery.trim() ||
-                        selectedPlatforms.length === 0 ||
-                        isSearching ||
-                        userStats.searches <= 0
-                      }
-                      className="absolute left-2 top-1/2 transform -translate-y-1/2 bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-2 rounded-xl font-persian font-medium hover:from-blue-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-lg"
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                    >
-                      {isSearching ? (
-                        <div className="flex items-center space-x-2 rtl:space-x-reverse">
-                          <motion.div
-                            className="w-4 h-4 border-2 border-white border-t-transparent rounded-full"
-                            animate={{ rotate: 360 }}
-                            transition={{
-                              duration: 1,
-                              repeat: Infinity,
-                              ease: "linear",
-                            }}
-                          />
-                          <span className="mr-2">جستجو...</span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center space-x-2 rtl:space-x-reverse">
-                          <Sparkles className="w-4 h-4" />
-                          <span className="mr-1">جستجو</span>
-                        </div>
-                      )}
-                    </motion.button>
-                  </div>
+              <div className="bg-white/10 backdrop-blur-lg rounded-3xl p-8 border border-white/20">
+                <div className="relative mb-6">
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onKeyPress={(e) => e.key === "Enter" && handleSearch()}
+                    placeholder="عبارت مورد نظر..."
+                    className="w-full text-lg px-6 py-4 pr-14 bg-white/5 border border-white/20 rounded-2xl placeholder-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400 font-persian text-right"
+                  />
+                  <Search className="absolute right-5 top-1/2 -translate-y-1/2 text-blue-300" />
+                  <motion.button
+                    onClick={handleSearch}
+                    disabled={
+                      !searchQuery ||
+                      selectedPlatforms.length === 0 ||
+                      isSearching
+                    }
+                    className="absolute left-2 top-1/2 -translate-y-1/2 bg-gradient-to-r from-blue-500 to-purple-600 px-6 py-2 rounded-xl font-persian disabled:opacity-50"
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    {isSearching ? "..." : "جستجو"}
+                  </motion.button>
                 </div>
-
-                {/* Platform Selection */}
                 <div className="mb-6">
-                  <label className="block text-lg font-semibold text-white mb-4 font-persian">
+                  <label className="block text-lg font-semibold mb-4 font-persian">
                     انتخاب پلتفرم‌ها
                   </label>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    {platforms.map((platform) => (
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                    {platforms.map((p) => (
                       <motion.div
-                        key={platform.id}
-                        className={`relative cursor-pointer rounded-2xl p-4 border-2 transition-all duration-300 ${
-                          selectedPlatforms.includes(platform.id)
+                        key={p.id}
+                        onClick={() => handlePlatformToggle(p.id)}
+                        className={`relative cursor-pointer rounded-2xl p-4 border-2 transition-all ${
+                          selectedPlatforms.includes(p.id)
                             ? "border-blue-400 bg-blue-500/20"
-                            : "border-white/20 bg-white/5 hover:border-white/40 hover:bg-white/10"
+                            : "border-white/20 bg-white/5 hover:bg-white/10"
                         }`}
-                        onClick={() => handlePlatformToggle(platform.id)}
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
+                        whileHover={{ y: -5 }}
                       >
-                        <div className="flex items-center space-x-3 rtl:space-x-reverse">
+                        <div className="flex flex-col items-center text-center">
                           <div
-                            className={`w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-r ${platform.color}`}
+                            className={`w-14 h-14 rounded-xl flex items-center justify-center bg-gradient-to-r ${p.color}`}
                           >
-                            <platform.icon className="w-6 h-6 text-white" />
+                            <p.icon size={28} />
                           </div>
-                          <div className="flex-1">
-                            <h3 className="font-semibold text-white font-persian">
-                              {platform.name}
-                            </h3>
-                            <div className="flex flex-wrap gap-1 mt-1">
-                              {platform.features
-                                .slice(0, 2)
-                                .map((feature, i) => (
-                                  <span
-                                    key={i}
-                                    className="text-xs text-blue-200 bg-white/10 px-2 py-1 rounded-lg"
-                                  >
-                                    {feature}
-                                  </span>
-                                ))}
-                            </div>
-                          </div>
+                          <h3 className="font-semibold mt-3 font-persian">
+                            {p.name}
+                          </h3>
                         </div>
-                        {selectedPlatforms.includes(platform.id) && (
+                        {selectedPlatforms.includes(p.id) && (
                           <motion.div
-                            className="absolute -top-1 -right-1 w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center"
-                            initial={{ scale: 0 }}
-                            animate={{ scale: 1 }}
-                            transition={{ duration: 0.2 }}
+                            layoutId={`check-${p.id}`}
+                            className="absolute top-2 right-2 w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center"
                           >
-                            <CheckCircle className="w-4 h-4 text-white" />
+                            <CheckCircle size={16} />
                           </motion.div>
                         )}
                       </motion.div>
                     ))}
                   </div>
                 </div>
-
-                {/* Filters */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                  <div>
-                    <label className="block text-sm font-medium text-white mb-2 font-persian">
-                      بازه زمانی
-                    </label>
-                    <CustomDropdown
-                      value={filters.dateRange}
-                      onChange={(value) =>
-                        setFilters((prev) => ({ ...prev, dateRange: value }))
-                      }
-                      options={dateRangeOptions}
-                      placeholder="انتخاب بازه"
-                      icon={Calendar}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-white mb-2 font-persian">
-                      نوع محتوا
-                    </label>
-                    <CustomDropdown
-                      value={filters.contentType}
-                      onChange={(value) =>
-                        setFilters((prev) => ({ ...prev, contentType: value }))
-                      }
-                      options={contentTypeOptions}
-                      placeholder="انتخاب نوع"
-                      icon={Filter}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-white mb-2 font-persian">
-                      احساسات
-                    </label>
-                    <CustomDropdown
-                      value={filters.sentiment}
-                      onChange={(value) =>
-                        setFilters((prev) => ({ ...prev, sentiment: value }))
-                      }
-                      options={sentimentOptions}
-                      placeholder="انتخاب احساس"
-                      icon={TrendingUp}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-white mb-2 font-persian">
-                      زبان
-                    </label>
-                    <select
-                      value={filters.language}
-                      onChange={(e) =>
-                        setFilters((prev) => ({
-                          ...prev,
-                          language: e.target.value,
-                        }))
-                      }
-                      className="w-full px-4 py-3 bg-white/10 backdrop-blur-sm border-2 border-white/30 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-400 font-persian"
-                    >
-                      <option value="fa" className="bg-gray-800">
-                        فارسی
-                      </option>
-                      <option value="en" className="bg-gray-800">
-                        انگلیسی
-                      </option>
-                      <option value="ar" className="bg-gray-800">
-                        عربی
-                      </option>
-                    </select>
-                  </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  <CustomDropdown
+                    value={filters.dateRange}
+                    onChange={(v) =>
+                      setFilters((f) => ({ ...f, dateRange: v }))
+                    }
+                    options={dateRangeOptions}
+                    placeholder="بازه زمانی"
+                    icon={Calendar}
+                  />
+                  <CustomDropdown
+                    value={filters.contentType}
+                    onChange={(v) =>
+                      setFilters((f) => ({ ...f, contentType: v }))
+                    }
+                    options={contentTypeOptions}
+                    placeholder="نوع محتوا"
+                    icon={Filter}
+                  />
+                  <CustomDropdown
+                    value={filters.sentiment}
+                    onChange={(v) =>
+                      setFilters((f) => ({ ...f, sentiment: v }))
+                    }
+                    options={sentimentOptions}
+                    placeholder="احساسات"
+                    icon={TrendingUp}
+                  />
                 </div>
-
-                {/* AI Enhancement Toggle */}
                 <div className="flex items-center justify-between bg-white/5 rounded-2xl p-4 border border-white/10">
                   <div className="flex items-center space-x-3 rtl:space-x-reverse">
                     <div
@@ -922,14 +904,14 @@ const Dashboard = () => {
                           : "bg-white/20"
                       }`}
                     >
-                      <Bot className="w-6 h-6 text-white" />
+                      <Bot size={28} />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-white font-persian">
+                      <h3 className="font-semibold font-persian">
                         تحلیل هوش مصنوعی
                       </h3>
                       <p className="text-sm text-blue-200 font-persian">
-                        بینش‌های پیشرفته از نتایج (100 توکن)
+                        بینش‌های پیشرفته از نتایج (۱۰۰ توکن)
                       </p>
                     </div>
                   </div>
@@ -943,507 +925,331 @@ const Dashboard = () => {
                         icon={Zap}
                       />
                     )}
-                    <motion.button
+                    <button
                       onClick={() => setUseAI(!useAI)}
-                      className={`relative w-16 h-8 rounded-full transition-colors duration-300 ${
+                      className={`relative w-14 h-8 rounded-full transition-colors ${
                         useAI ? "bg-blue-500" : "bg-white/20"
                       }`}
-                      whileTap={{ scale: 0.95 }}
                     >
                       <motion.div
-                        className="absolute top-1 w-6 h-6 bg-white rounded-full shadow-lg"
-                        animate={{ x: useAI ? 32 : 4 }}
-                        transition={{ duration: 0.2 }}
+                        className="w-6 h-6 bg-white rounded-full absolute top-1"
+                        animate={{ x: useAI ? 28 : 4 }}
                       />
-                    </motion.button>
+                    </button>
                   </div>
                 </div>
-              </motion.div>
+              </div>
             </motion.div>
           )}
 
           {activeTab === "results" && (
             <motion.div
-              key="results"
+              key="results-tab"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.5 }}
             >
               {searchResults.length > 0 ? (
                 <>
-                  {/* Search Summary */}
-                  <motion.div
-                    className="bg-white/10 backdrop-blur-lg rounded-3xl p-6 mb-6 border border-white/20"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.2 }}
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-4">
-                      <div className="flex items-center space-x-4 rtl:space-x-reverse">
-                        <div className="bg-blue-500/20 rounded-xl p-3">
-                          <Search className="w-6 h-6 text-blue-400" />
+                  <div className="bg-white/10 backdrop-blur-lg rounded-3xl p-6 mb-6 border border-white/20 flex justify-between items-center">
+                    <h3 className="text-lg font-semibold font-persian">
+                      نتایج برای "{searchQuery}" ({searchResults.length} مورد)
+                    </h3>
+                    <div className="flex space-x-2 rtl:space-x-reverse">
+                      <button
+                        onClick={() =>
+                          apiService.exportResults(searchResults, "json")
+                        }
+                        className="px-4 py-2 bg-white/10 border border-white/20 rounded-xl hover:bg-white/20 flex items-center space-x-2 rtl:space-x-reverse font-persian"
+                      >
+                        <Download size={16} />
+                        <span>دانلود</span>
+                      </button>
+                      <button
+                        onClick={() =>
+                          apiService.shareResults(searchResults, searchQuery)
+                        }
+                        className="px-4 py-2 bg-white/10 border border-white/20 rounded-xl hover:bg-white/20 flex items-center space-x-2 rtl:space-x-reverse font-persian"
+                      >
+                        <Share2 size={16} />
+                        <span>اشتراک</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {aiInsight && (
+                    <div className="bg-gradient-to-r from-purple-500/20 to-pink-500/20 rounded-3xl p-6 mb-6 border border-purple-400/30">
+                      <div className="flex items-start space-x-4 rtl:space-x-reverse">
+                        <div className="bg-purple-500/30 rounded-xl p-3">
+                          <Bot className="text-purple-300" />
                         </div>
-                        <div>
-                          <h3 className="text-lg font-semibold text-white font-persian">
-                            نتایج جستجو برای "{searchQuery}"
+                        <div className="flex-1">
+                          <h3 className="text-lg font-semibold mb-2 font-persian">
+                            تحلیل هوش مصنوعی
                           </h3>
-                          <p className="text-blue-200 font-persian">
-                            {searchResults.length} نتیجه یافت شد از{" "}
-                            {selectedPlatforms.length} پلتفرم
-                            {connectionStatus === "disconnected" &&
-                              " (آزمایشی)"}
+                          <p className="leading-relaxed font-persian whitespace-pre-wrap">
+                            {aiInsight}
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center space-x-2 rtl:space-x-reverse">
-                        <motion.button
-                          onClick={() => handleExport("json")}
-                          className="px-4 py-2 bg-white/10 border border-white/20 rounded-xl text-white hover:bg-white/20 transition-all duration-300 flex items-center space-x-2 rtl:space-x-reverse"
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                        >
-                          <Download className="w-4 h-4" />
-                          <span className="font-persian mr-2">دانلود</span>
-                        </motion.button>
-                        <motion.button
-                          onClick={handleShare}
-                          className="px-4 py-2 bg-white/10 border border-white/20 rounded-xl text-white hover:bg-white/20 transition-all duration-300 flex items-center space-x-2 rtl:space-x-reverse"
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                        >
-                          <Share2 className="w-4 h-4" />
-                          <span className="font-persian mr-2">اشتراک</span>
-                        </motion.button>
-                      </div>
                     </div>
-                  </motion.div>
-
-                  {/* AI Insight */}
-                  {aiInsight && (
-                    <motion.div
-                      className="bg-gradient-to-r from-purple-500/20 to-pink-500/20 backdrop-blur-lg rounded-3xl p-6 mb-6 border border-purple-400/30"
-                      initial={{ opacity: 0, scale: 0.95 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: 0.4 }}
-                    >
-                      <div className="flex items-start space-x-4 rtl:space-x-reverse">
-                        <div className="bg-purple-500/30 rounded-xl p-3">
-                          <Bot className="w-6 h-6 text-purple-300" />
-                        </div>
-                        <div className="flex-1">
-                          <h3 className="text-lg font-semibold text-white mb-3 font-persian">
-                            تحلیل هوش مصنوعی ({aiProvider.toUpperCase()})
-                          </h3>
-                          <div className="text-purple-100 leading-relaxed font-persian whitespace-pre-wrap">
-                            {aiInsight}
-                          </div>
-                        </div>
-                      </div>
-                    </motion.div>
                   )}
 
-                  {/* Results List */}
                   <div className="space-y-4">
                     {searchResults
                       .slice(0, loadedResults)
-                      .map((result, index) => {
-                        const PlatformIcon = getPlatformIcon(result.platform);
-                        const MediaIcon = getMediaTypeIcon(result.mediaType);
-
-                        return (
-                          <motion.div
-                            key={result.id}
-                            className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20 hover:bg-white/15 transition-all duration-300"
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: index * 0.1 }}
-                            whileHover={{ scale: 1.02 }}
-                          >
-                            <div className="flex items-start space-x-4 rtl:space-x-reverse">
-                              {/* Platform Icon */}
-                              <div
-                                className={`w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-r ${
-                                  platforms.find(
-                                    (p) => p.id === result.platform
-                                  )?.color || "from-gray-500 to-gray-700"
-                                }`}
-                              >
-                                <PlatformIcon className="w-6 h-6 text-white" />
+                      .map((result, index) => (
+                        <motion.div
+                          key={result.id}
+                          className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20"
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: index * 0.05 }}
+                        >
+                          <div className="flex items-start space-x-4 rtl:space-x-reverse">
+                            <div
+                              className={`w-12 h-12 rounded-xl flex-shrink-0 flex items-center justify-center bg-gradient-to-r ${
+                                platforms.find((p) => p.id === result.platform)
+                                  ?.color
+                              }`}
+                            >
+                              {React.createElement(
+                                getPlatformIcon(result.platform)
+                              )}
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex justify-between items-center mb-2">
+                                <div className="flex items-center space-x-3 rtl:space-x-reverse">
+                                  <span className="font-semibold font-persian">
+                                    {result.author}
+                                  </span>
+                                  <span className="text-gray-400 text-sm">
+                                    {result.date}
+                                  </span>
+                                </div>
+                                <div
+                                  className={`text-sm font-persian px-2 py-1 rounded-full flex items-center space-x-1 rtl:space-x-reverse ${getSentimentColor(
+                                    result.sentiment
+                                  )
+                                    .replace("text-", "bg-")
+                                    .replace(
+                                      "-400",
+                                      "/20"
+                                    )} ${getSentimentColor(result.sentiment)}`}
+                                >
+                                  {React.createElement(
+                                    getMediaTypeIcon(result.mediaType),
+                                    { size: 14 }
+                                  )}
+                                  <span>
+                                    {getSentimentLabel(result.sentiment)}
+                                  </span>
+                                </div>
                               </div>
-
-                              {/* Content */}
-                              <div className="flex-1">
-                                <div className="flex items-center justify-between mb-3">
-                                  <div className="flex items-center space-x-3 rtl:space-x-reverse">
-                                    <span className="font-semibold text-white font-persian">
-                                      {result.author}
-                                    </span>
-                                    {result.channelTitle && (
-                                      <span className="text-blue-300 font-persian text-sm">
-                                        از {result.channelTitle}
-                                      </span>
-                                    )}
-                                    <span className="text-gray-400 text-sm">
-                                      {result.date}
+                              <p className="leading-relaxed mb-4 font-persian">
+                                {result.content}
+                              </p>
+                              {result.media && (
+                                <img
+                                  src={result.media}
+                                  alt=""
+                                  className="w-full h-48 object-cover rounded-xl mb-4"
+                                />
+                              )}
+                              <div className="flex justify-between items-center">
+                                <div className="flex items-center space-x-6 rtl:space-x-reverse text-gray-300 text-sm">
+                                  <div className="flex items-center space-x-2 rtl:space-x-reverse">
+                                    <Heart size={16} className="text-red-400" />
+                                    <span>
+                                      {result.engagement?.likes?.toLocaleString() ||
+                                        0}
                                     </span>
                                   </div>
                                   <div className="flex items-center space-x-2 rtl:space-x-reverse">
-                                    <MediaIcon className="w-4 h-4 text-blue-300" />
-                                    <span
-                                      className={`text-sm font-persian ${getSentimentColor(
-                                        result.sentiment
-                                      )}`}
-                                    >
-                                      {getSentimentLabel(result.sentiment)}
+                                    <MessageSquare
+                                      size={16}
+                                      className="text-blue-400"
+                                    />
+                                    <span>
+                                      {result.engagement?.comments?.toLocaleString() ||
+                                        0}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center space-x-2 rtl:space-x-reverse">
+                                    <Repeat2
+                                      size={16}
+                                      className="text-green-400"
+                                    />
+                                    <span>
+                                      {result.engagement?.shares?.toLocaleString() ||
+                                        0}
                                     </span>
                                   </div>
                                 </div>
-
-                                <p className="text-white leading-relaxed mb-4 font-persian">
-                                  {result.content}
-                                </p>
-
-                                {/* Media Preview */}
-                                {result.media && (
-                                  <div className="mb-4">
-                                    {result.mediaType === "image" ? (
-                                      <img
-                                        src={result.media}
-                                        alt="Content media"
-                                        className="w-full h-48 object-cover rounded-xl"
-                                        loading="lazy"
-                                      />
-                                    ) : result.mediaType === "video" ? (
-                                      <div className="w-full h-48 bg-black/50 rounded-xl flex items-center justify-center">
-                                        <div className="text-center">
-                                          <Video className="w-12 h-12 text-white mx-auto mb-2" />
-                                          <p className="text-white font-persian">
-                                            ویدیو
-                                          </p>
-                                        </div>
-                                      </div>
-                                    ) : null}
-                                  </div>
-                                )}
-
-                                {/* Engagement Stats */}
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center space-x-6 rtl:space-x-reverse">
-                                    <div className="flex items-center space-x-2 rtl:space-x-reverse">
-                                      <Heart className="w-4 h-4 text-red-400" />
-                                      <span className="text-sm text-gray-300">
-                                        {result.engagement?.likes?.toLocaleString() ||
-                                          result.engagement?.views?.toLocaleString() ||
-                                          0}
-                                      </span>
-                                    </div>
-                                    <div className="flex items-center space-x-2 rtl:space-x-reverse">
-                                      <MessageSquare className="w-4 h-4 text-blue-400" />
-                                      <span className="text-sm text-gray-300">
-                                        {result.engagement?.comments?.toLocaleString() ||
-                                          0}
-                                      </span>
-                                    </div>
-                                    <div className="flex items-center space-x-2 rtl:space-x-reverse">
-                                      <Repeat2 className="w-4 h-4 text-green-400" />
-                                      <span className="text-sm text-gray-300">
-                                        {result.engagement?.shares?.toLocaleString() ||
-                                          0}
-                                      </span>
-                                    </div>
-                                  </div>
-
-                                  <div className="flex items-center space-x-2 rtl:space-x-reverse">
-                                    <motion.button
-                                      className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-all duration-300"
-                                      whileHover={{ scale: 1.1 }}
-                                      whileTap={{ scale: 0.95 }}
-                                    >
-                                      <Bookmark className="w-4 h-4" />
-                                    </motion.button>
-                                    <motion.a
-                                      href={result.originalUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-all duration-300"
-                                      whileHover={{ scale: 1.1 }}
-                                      whileTap={{ scale: 0.95 }}
-                                    >
-                                      <ExternalLink className="w-4 h-4" />
-                                    </motion.a>
-                                  </div>
+                                <div className="flex items-center space-x-2 rtl:space-x-reverse">
+                                  <button className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg">
+                                    <Bookmark size={16} />
+                                  </button>
+                                  <a
+                                    href={result.originalUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg"
+                                  >
+                                    <ExternalLink size={16} />
+                                  </a>
                                 </div>
                               </div>
                             </div>
-                          </motion.div>
-                        );
-                      })}
+                          </div>
+                        </motion.div>
+                      ))}
                   </div>
-
-                  {/* Load More Button */}
                   {loadedResults < searchResults.length && (
-                    <motion.div
-                      className="text-center mt-8"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ delay: 0.5 }}
-                    >
-                      <motion.button
+                    <div className="text-center mt-8">
+                      <button
                         onClick={loadMoreResults}
-                        className="px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-2xl font-persian font-semibold hover:from-blue-600 hover:to-purple-700 transition-all duration-300 shadow-lg hover:shadow-xl"
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
+                        className="px-8 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl font-persian font-semibold"
                       >
-                        <div className="flex items-center space-x-2 rtl:space-x-reverse">
-                          <RefreshCw className="w-5 h-5" />
-                          <span className="mr-2">نمایش بیشتر</span>
-                        </div>
-                      </motion.button>
-                    </motion.div>
+                        نمایش بیشتر
+                      </button>
+                    </div>
                   )}
                 </>
               ) : (
-                <motion.div
-                  className="text-center py-12"
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ duration: 0.5 }}
-                >
-                  <div className="bg-white/10 backdrop-blur-lg rounded-3xl p-8 border border-white/20 max-w-md mx-auto">
+                <div className="text-center py-12">
+                  <div className="bg-white/10 rounded-3xl p-8 max-w-md mx-auto">
                     <Search className="w-16 h-16 text-blue-400 mx-auto mb-4 opacity-50" />
-                    <h3 className="text-xl font-semibold text-white mb-2 font-persian">
+                    <h3 className="text-xl font-semibold font-persian">
                       هنوز جستجویی انجام نشده
                     </h3>
-                    <p className="text-blue-200 font-persian">
-                      از تب جستجو برای یافتن محتوا استفاده کنید
+                    <p className="text-blue-200 font-persian mt-2">
+                      از تب جستجو برای یافتن محتوا استفاده کنید.
                     </p>
-                    <motion.button
-                      onClick={() => setActiveTab("search")}
-                      className="mt-4 px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl font-persian font-medium hover:from-blue-600 hover:to-purple-700 transition-all duration-300"
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                    >
-                      شروع جستجو
-                    </motion.button>
                   </div>
-                </motion.div>
+                </div>
               )}
             </motion.div>
           )}
 
           {activeTab === "analytics" && (
             <motion.div
-              key="analytics"
+              key="analytics-tab"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.5 }}
             >
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {/* Search Stats */}
-                <motion.div
-                  className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20"
-                  whileHover={{ scale: 1.02 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <div className="flex items-center space-x-4 rtl:space-x-reverse">
-                    <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-cyan-600 rounded-xl flex items-center justify-center">
-                      <Search className="w-6 h-6 text-white" />
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-semibold text-white font-persian">
-                        جستجوهای انجام شده
-                      </h3>
-                      <p className="text-2xl font-bold text-blue-400">
-                        {50 - userStats.searches}
-                      </p>
-                    </div>
+                <div className="bg-white/10 rounded-2xl p-6 flex items-center space-x-4 rtl:space-x-reverse">
+                  <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-cyan-600 rounded-xl flex items-center justify-center">
+                    <Search />
                   </div>
-                </motion.div>
-
-                {/* AI Usage */}
-                <motion.div
-                  className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20"
-                  whileHover={{ scale: 1.02 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <div className="flex items-center space-x-4 rtl:space-x-reverse">
-                    <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-600 rounded-xl flex items-center justify-center">
-                      <Bot className="w-6 h-6 text-white" />
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-semibold text-white font-persian">
-                        توکن‌های مصرفی
-                      </h3>
-                      <p className="text-2xl font-bold text-purple-400">
-                        {1000 - userStats.aiTokens}
-                      </p>
-                    </div>
+                  <div>
+                    <h3 className="font-persian">جستجوهای انجام شده</h3>
+                    <p className="text-2xl font-bold text-blue-400">
+                      {50 - userStats.searches}
+                    </p>
                   </div>
-                </motion.div>
-
-                {/* Results Found */}
-                <motion.div
-                  className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20"
-                  whileHover={{ scale: 1.02 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <div className="flex items-center space-x-4 rtl:space-x-reverse">
-                    <div className="w-12 h-12 bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl flex items-center justify-center">
-                      <TrendingUp className="w-6 h-6 text-white" />
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-semibold text-white font-persian">
-                        نتایج یافت شده
-                      </h3>
-                      <p className="text-2xl font-bold text-green-400">
-                        {searchResults.length}
-                      </p>
-                    </div>
+                </div>
+                <div className="bg-white/10 rounded-2xl p-6 flex items-center space-x-4 rtl:space-x-reverse">
+                  <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-600 rounded-xl flex items-center justify-center">
+                    <Bot />
                   </div>
-                </motion.div>
-
-                {/* Backend Status */}
-                <motion.div
-                  className={`bg-white/10 backdrop-blur-lg rounded-2xl p-6 border ${
-                    connectionStatus === "connected"
-                      ? "border-green-400/30"
-                      : "border-red-400/30"
-                  }`}
-                  whileHover={{ scale: 1.02 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <div className="flex items-center space-x-4 rtl:space-x-reverse">
-                    <div
-                      className={`w-12 h-12 bg-gradient-to-r ${
-                        connectionStatus === "connected"
-                          ? "from-green-500 to-emerald-600"
-                          : "from-red-500 to-red-700"
-                      } rounded-xl flex items-center justify-center`}
-                    >
-                      {connectionStatus === "connected" ? (
-                        <CheckCircle className="w-6 h-6 text-white" />
-                      ) : (
-                        <AlertCircle className="w-6 h-6 text-white" />
-                      )}
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-semibold text-white font-persian">
-                        وضعیت سرور
-                      </h3>
-                      <p
-                        className={`text-xl font-bold ${
-                          connectionStatus === "connected"
-                            ? "text-green-400"
-                            : "text-red-400"
-                        }`}
-                      >
-                        {connectionStatus === "connected" ? "متصل" : "قطع"}
-                      </p>
-                    </div>
+                  <div>
+                    <h3 className="font-persian">توکن‌های مصرفی</h3>
+                    <p className="text-2xl font-bold text-purple-400">
+                      {1000 - userStats.aiTokens}
+                    </p>
                   </div>
-                </motion.div>
-
-                {/* Platform Usage Chart */}
-                <motion.div
-                  className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20 md:col-span-2 lg:col-span-3"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.3 }}
-                >
-                  <h3 className="text-lg font-semibold text-white mb-4 font-persian">
+                </div>
+                <div className="bg-white/10 rounded-2xl p-6 flex items-center space-x-4 rtl:space-x-reverse">
+                  <div className="w-12 h-12 bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl flex items-center justify-center">
+                    <TrendingUp />
+                  </div>
+                  <div>
+                    <h3 className="font-persian">نتایج یافت شده</h3>
+                    <p className="text-2xl font-bold text-green-400">
+                      {searchResults.length}
+                    </p>
+                  </div>
+                </div>
+                <div className="md:col-span-2 lg:col-span-3 bg-white/10 rounded-2xl p-6">
+                  <h3 className="text-lg font-semibold font-persian mb-4">
                     استفاده از پلتفرم‌ها
                   </h3>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    {platforms.map((platform, index) => (
-                      <motion.div
-                        key={platform.id}
-                        className="bg-white/5 rounded-xl p-4"
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: index * 0.1 }}
-                      >
-                        <div className="flex items-center space-x-3 rtl:space-x-reverse mb-3">
-                          <div
-                            className={`w-8 h-8 rounded-lg flex items-center justify-center bg-gradient-to-r ${platform.color}`}
-                          >
-                            <platform.icon className="w-4 h-4 text-white" />
-                          </div>
-                          <span className="text-white font-persian">
-                            {platform.name}
+                  <div className="space-y-4">
+                    {platforms.map((p) => (
+                      <div key={p.id}>
+                        <div className="flex justify-between items-center mb-1 font-persian text-sm">
+                          <span className="flex items-center space-x-2 rtl:space-x-reverse">
+                            <p.icon size={16} />
+                            <span>{p.name}</span>
+                          </span>
+                          <span>
+                            {
+                              searchResults.filter((r) => r.platform === p.id)
+                                .length
+                            }
                           </span>
                         </div>
-                        <div className="h-2 bg-white/20 rounded-full overflow-hidden">
-                          <motion.div
-                            className={`h-full bg-gradient-to-r ${platform.color}`}
-                            initial={{ width: 0 }}
-                            animate={{
+                        <div className="h-2 bg-white/10 rounded-full">
+                          <div
+                            className={`h-2 rounded-full bg-gradient-to-r ${p.color}`}
+                            style={{
                               width: `${
-                                selectedPlatforms.includes(platform.id) &&
                                 searchResults.length > 0
-                                  ? Math.floor(Math.random() * 50) + 30
-                                  : Math.floor(Math.random() * 20) + 5
+                                  ? (searchResults.filter(
+                                      (r) => r.platform === p.id
+                                    ).length /
+                                      searchResults.length) *
+                                    100
+                                  : 0
                               }%`,
                             }}
-                            transition={{
-                              delay: index * 0.2,
-                              duration: 0.8,
-                            }}
-                          />
+                          ></div>
                         </div>
-                      </motion.div>
+                      </div>
                     ))}
                   </div>
-                </motion.div>
-
-                {/* Account Plan */}
-                <motion.div
-                  className="bg-gradient-to-r from-yellow-500/20 to-orange-500/20 backdrop-blur-lg rounded-2xl p-6 border border-yellow-400/30 md:col-span-2 lg:col-span-3"
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: 0.5 }}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-4 rtl:space-x-reverse">
-                      <div className="w-12 h-12 bg-gradient-to-r from-yellow-500 to-orange-600 rounded-xl flex items-center justify-center">
-                        <Star className="w-6 h-6 text-white" />
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-semibold text-white font-persian">
-                          حساب کاربری {userStats.plan}
-                        </h3>
-                        <p className="text-yellow-200 font-persian">
-                          {userStats.searches} جستجو و {userStats.aiTokens} توکن
-                          باقی‌مانده
-                        </p>
-                      </div>
-                    </div>
-                    <motion.button
-                      className="px-6 py-3 bg-gradient-to-r from-yellow-500 to-orange-600 text-white rounded-xl font-persian font-semibold hover:from-yellow-600 hover:to-orange-700 transition-all duration-300"
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                    >
-                      ارتقاء حساب
-                    </motion.button>
-                  </div>
-                </motion.div>
+                </div>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
-      </div>
+      </main>
     </div>
   );
 };
 
-// --- Main App Component ---
-function App() {
+// --- App Structure and Routing ---
+
+const ProtectedRoute = ({ children }) => {
+  const { user, loading } = useAuth();
+  if (loading) return <LoadingSpinner />;
+  return user ? children : <Navigate to="/" replace />;
+};
+
+const App = () => {
   return (
     <AuthProvider>
-      <Dashboard />
+      <Router>
+        <AnimatePresence mode="wait">
+          <Routes>
+            <Route path="/" element={<Login />} />
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute>
+                  <Dashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </AnimatePresence>
+      </Router>
     </AuthProvider>
   );
-}
+};
 
 export default App;

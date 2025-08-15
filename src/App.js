@@ -57,6 +57,9 @@ import {
   Minus,
   History,
   Info,
+  Server,
+  Cloud,
+  BrainCircuit,
 } from "lucide-react";
 
 // Firebase Configuration
@@ -68,6 +71,7 @@ import {
   onAuthStateChanged,
   GoogleAuthProvider,
   signInWithPopup,
+  getRedirectResult,
 } from "firebase/auth";
 import { getFirestore, doc, setDoc, getDoc } from "firebase/firestore";
 
@@ -105,6 +109,7 @@ const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // This listener handles all auth state changes
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         const userDocRef = doc(db, "users", firebaseUser.uid);
@@ -116,8 +121,12 @@ const AuthProvider = ({ children }) => {
             name: firebaseUser.displayName || "کاربر جدید",
             email: firebaseUser.email,
             plan: "Premium",
-            searches: 500,
-            aiTokens: 10000,
+            searches: {
+              twitter: 200,
+              instagram: 150,
+              telegram: 150,
+              ai: 10000,
+            },
             createdAt: new Date().toISOString(),
           };
           await setDoc(userDocRef, newUser);
@@ -127,6 +136,11 @@ const AuthProvider = ({ children }) => {
         setUser(null);
       }
       setLoading(false);
+    });
+
+    // This handles the redirect result ONCE on page load
+    getRedirectResult(auth).catch((error) => {
+      console.error("Error getting redirect result:", error);
     });
 
     return unsubscribe;
@@ -169,37 +183,56 @@ const LoadingSpinner = () => (
   </div>
 );
 
-// --- NEW: Animatic Progress Bar Component ---
-const SearchProgressBar = ({ progress, statusText }) => (
-  <motion.div
-    className="w-full bg-white/10 rounded-full h-6 my-4 border border-white/20 relative overflow-hidden"
-    initial={{ opacity: 0, y: -10 }}
-    animate={{ opacity: 1, y: 0 }}
-    exit={{ opacity: 0, y: -10 }}
-  >
+// --- NEW: Animatic Search Loader ---
+const SearchLoader = ({ statusText, progress }) => {
+  const stages = [
+    { text: "برقراری ارتباط...", icon: Server, progress: 10 },
+    { text: "ارسال درخواست...", icon: Cloud, progress: 30 },
+    { text: "تحلیل نتایج...", icon: BrainCircuit, progress: 70 },
+    { text: "آماده‌سازی...", icon: CheckCircle, progress: 90 },
+  ];
+
+  return (
     <motion.div
-      className="absolute top-0 left-0 h-full bg-gradient-to-r from-blue-500 to-purple-600"
-      initial={{ width: "0%" }}
-      animate={{ width: `${progress}%` }}
-      transition={{ duration: 0.5, ease: "easeInOut" }}
-    />
-    <motion.div
-      className="absolute top-0 left-0 h-full w-full bg-repeat-x opacity-20"
-      style={{
-        backgroundImage:
-          "linear-gradient(45deg, rgba(255,255,255,0.15) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0.15) 75%, transparent 75%, transparent)",
-        backgroundSize: "40px 40px",
-      }}
-      animate={{ backgroundPositionX: ["0px", "40px"] }}
-      transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-    />
-    <div className="absolute inset-0 flex items-center justify-center">
-      <p className="text-sm font-bold text-white font-persian text-shadow">
-        {statusText}
-      </p>
-    </div>
-  </motion.div>
-);
+      className="w-full bg-white/5 rounded-2xl p-4 my-4 border border-white/10"
+      initial={{ opacity: 0, y: -10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -10 }}
+    >
+      <div className="flex justify-between items-center mb-2">
+        <p className="text-sm font-semibold text-white font-persian">
+          {statusText}
+        </p>
+        <p className="text-sm font-bold text-blue-300">{progress}%</p>
+      </div>
+      <div className="w-full bg-black/20 rounded-full h-2.5">
+        <motion.div
+          className="bg-gradient-to-r from-blue-500 to-purple-500 h-2.5 rounded-full"
+          initial={{ width: "0%" }}
+          animate={{ width: `${progress}%` }}
+          transition={{ duration: 0.5, ease: "circOut" }}
+        />
+      </div>
+      <div className="flex justify-between mt-3">
+        {stages.map((stage) => (
+          <motion.div
+            key={stage.text}
+            className="flex flex-col items-center space-y-1"
+            animate={{ opacity: progress >= stage.progress ? 1 : 0.4 }}
+            transition={{ duration: 0.3 }}
+          >
+            <div
+              className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${progress >= stage.progress ? "bg-blue-500" : "bg-slate-600"}`}
+            >
+              <stage.icon size={16} className="text-white" />
+            </div>
+            <p className="text-xs text-slate-300 font-persian">{stage.text}</p>
+          </motion.div>
+        ))}
+      </div>
+    </motion.div>
+  );
+};
 
 // --- NEW: Animatic Alert Component ---
 const AnimaticAlert = ({ message, icon, color, onConfirm, onCancel }) => (
@@ -216,12 +249,12 @@ const AnimaticAlert = ({ message, icon, color, onConfirm, onCancel }) => (
       transition={{ type: "spring", stiffness: 300, damping: 20 }}
     >
       <motion.div
-        className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 border-4 ${color}-border`}
+        className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 border-4 bg-${color}-500/20 border-${color}-500`}
         initial={{ scale: 0 }}
         animate={{ scale: [0, 1.2, 1] }}
         transition={{ duration: 0.5, delay: 0.1 }}
       >
-        {React.createElement(icon, { className: `w-8 h-8 ${color}-text` })}
+        {React.createElement(icon, { className: `w-8 h-8 text-${color}-400` })}
       </motion.div>
       <p className="text-white font-persian text-lg mb-6">{message}</p>
       <div className="flex justify-center space-x-4 rtl:space-x-reverse">
@@ -240,7 +273,7 @@ const AnimaticAlert = ({ message, icon, color, onConfirm, onCancel }) => (
         )}
         <motion.button
           onClick={onConfirm}
-          className={`px-6 py-2 ${color}-bg text-white rounded-lg font-persian`}
+          className={`px-6 py-2 bg-${color}-600 text-white rounded-lg font-persian`}
           whileHover={{ scale: 1.05, filter: "brightness(1.1)" }}
           whileTap={{ scale: 0.95 }}
         >
@@ -517,10 +550,12 @@ const Dashboard = () => {
 
   const [userStats, setUserStats] = useState({
     plan: user?.plan || "Premium",
-    aiTokens: user?.aiTokens || 10000,
-    twitterSearches: user?.twitterSearches || 200,
-    instagramSearches: user?.instagramSearches || 150,
-    otherSearches: user?.otherSearches || 150,
+    searches: user?.searches || {
+      twitter: 200,
+      instagram: 150,
+      telegram: 150,
+      ai: 10000,
+    },
   });
 
   const [error, setError] = useState("");
@@ -529,7 +564,6 @@ const Dashboard = () => {
   const [searchProgress, setSearchProgress] = useState(0);
   const [searchStatusText, setSearchStatusText] = useState("");
 
-  // --- NEW: State for showing alerts ---
   const [alertInfo, setAlertInfo] = useState(null);
 
   const handleLogoutClick = () => {
@@ -548,10 +582,12 @@ const Dashboard = () => {
   useEffect(() => {
     setUserStats({
       plan: user?.plan || "Premium",
-      aiTokens: user?.aiTokens || 10000,
-      twitterSearches: user?.twitterSearches || 200,
-      instagramSearches: user?.instagramSearches || 150,
-      otherSearches: user?.otherSearches || 150,
+      searches: user?.searches || {
+        twitter: 200,
+        instagram: 150,
+        telegram: 150,
+        ai: 10000,
+      },
     });
     checkBackendConnection();
   }, [user]);
@@ -587,20 +623,6 @@ const Dashboard = () => {
       features: ["پست‌ها", "کاربران", "هشتگ‌ها"],
     },
     {
-      id: "facebook",
-      name: "فیسبوک",
-      icon: Facebook,
-      color: "from-blue-600 to-blue-800",
-      features: ["پست‌ها", "صفحات", "گروه‌ها"],
-    },
-    {
-      id: "eitaa",
-      name: "ایتا",
-      icon: MessageCircle,
-      color: "from-green-500 to-green-700",
-      features: ["کانال‌ها", "محتوا", "آمار"],
-    },
-    {
       id: "telegram",
       name: "تلگرام",
       icon: Send,
@@ -608,11 +630,28 @@ const Dashboard = () => {
       features: ["کانال‌ها", "گروه‌ها", "پیام‌ها"],
     },
     {
+      id: "facebook",
+      name: "فیسبوک",
+      icon: Facebook,
+      color: "from-blue-600 to-blue-800",
+      features: ["پست‌ها", "صفحات", "گروه‌ها"],
+      disabled: true,
+    },
+    {
+      id: "eitaa",
+      name: "ایتا",
+      icon: MessageCircle,
+      color: "from-green-500 to-green-700",
+      features: ["کانال‌ها", "محتوا", "آمار"],
+      disabled: true,
+    },
+    {
       id: "rubika",
       name: "روبیکا",
       icon: MessageSquare,
       color: "from-red-500 to-red-700",
       features: ["کانال‌ها", "روبینو", "پیام‌ها"],
+      disabled: true,
     },
   ];
 
@@ -769,7 +808,10 @@ const Dashboard = () => {
 
         if (searchResult.success && searchResult.aiAnalysis) {
           setAiInsight(searchResult.aiAnalysis);
-          setUserStats((prev) => ({ ...prev, aiTokens: prev.aiTokens - 100 }));
+          setUserStats((prev) => ({
+            ...prev,
+            searches: { ...prev.searches, ai: prev.searches.ai - 100 },
+          }));
         }
       } else {
         searchResult = await apiService.searchMultiple(
@@ -796,18 +838,11 @@ const Dashboard = () => {
           setSearchHistory((prev) => [newSearch, ...prev.slice(0, 9)]);
 
           setUserStats((prev) => {
-            const newStats = { ...prev };
-            if (selectedPlatforms.includes("twitter"))
-              newStats.twitterSearches--;
-            if (selectedPlatforms.includes("instagram"))
-              newStats.instagramSearches--;
-            if (
-              selectedPlatforms.some(
-                (p) => !["twitter", "instagram"].includes(p)
-              )
-            )
-              newStats.otherSearches--;
-            return newStats;
+            const newSearches = { ...prev.searches };
+            selectedPlatforms.forEach((p) => {
+              if (newSearches[p]) newSearches[p]--;
+            });
+            return { ...prev, searches: newSearches };
           });
         } else {
           setError(
@@ -898,13 +933,11 @@ const Dashboard = () => {
   };
 
   const getAnalyticsData = () => {
-    const totalSearches = 50 - userStats.searches;
     const totalResults = searchResults.length;
     const platformStats = {};
-
-    platforms.forEach((platform) => {
-      platformStats[platform.id] = searchResults.filter(
-        (r) => r.platform === platform.id
+    platforms.forEach((p) => {
+      platformStats[p.id] = searchResults.filter(
+        (r) => r.platform === p.id
       ).length;
     });
 
@@ -914,24 +947,22 @@ const Dashboard = () => {
       negative: searchResults.filter((r) => r.sentiment === "negative").length,
     };
 
+    const totalEngagement = searchResults.reduce((acc, result) => {
+      return (
+        acc +
+        (result.engagement.likes +
+          result.engagement.comments +
+          result.engagement.shares)
+      );
+    }, 0);
+
     return {
-      totalSearches,
-      totalResults,
+      totalSearches: searchHistory.length,
+      totalResults: totalResults,
       platformStats,
       sentimentStats,
       averageEngagement:
-        totalResults > 0
-          ? Math.round(
-              searchResults.reduce(
-                (acc, result) =>
-                  acc +
-                  (result.engagement.likes +
-                    result.engagement.comments +
-                    result.engagement.shares),
-                0
-              ) / totalResults
-            )
-          : 0,
+        totalResults > 0 ? Math.round(totalEngagement / totalResults) : 0,
     };
   };
 
@@ -964,37 +995,37 @@ const Dashboard = () => {
             >
               <Search className="w-6 h-6 text-white" />
             </motion.div>
-            <div>
+            <div className="hidden sm:block">
               <h1 className="text-xl font-bold font-persian">کاوش</h1>
               <p className="text-xs text-blue-300 font-persian">نسخه پیشرفته</p>
             </div>
           </div>
-          <div className="flex items-center space-x-2 rtl:space-x-reverse">
+          <div className="flex items-center space-x-1 sm:space-x-2 rtl:space-x-reverse">
             <motion.div
-              className="bg-white/10 rounded-xl px-3 py-1.5 border border-white/20 text-sm flex items-center space-x-2 rtl:space-x-reverse"
+              className="bg-white/10 rounded-xl px-2 sm:px-3 py-1.5 border border-white/20 text-sm flex items-center space-x-2 rtl:space-x-reverse"
               whileHover={{ scale: 1.05 }}
             >
               <Twitter size={14} className="text-blue-400" />
-              <span className="font-persian">{userStats.twitterSearches}</span>
+              <span className="font-persian">{userStats.searches.twitter}</span>
             </motion.div>
             <motion.div
-              className="bg-white/10 rounded-xl px-3 py-1.5 border border-white/20 text-sm flex items-center space-x-2 rtl:space-x-reverse"
+              className="bg-white/10 rounded-xl px-2 sm:px-3 py-1.5 border border-white/20 text-sm flex items-center space-x-2 rtl:space-x-reverse"
               whileHover={{ scale: 1.05 }}
             >
               <Instagram size={14} className="text-pink-400" />
               <span className="font-persian">
-                {userStats.instagramSearches}
+                {userStats.searches.instagram}
               </span>
             </motion.div>
             <motion.div
-              className="bg-white/10 rounded-xl px-3 py-1.5 border border-white/20 text-sm flex items-center space-x-2 rtl:space-x-reverse"
+              className="bg-white/10 rounded-xl px-2 sm:px-3 py-1.5 border border-white/20 text-sm flex items-center space-x-2 rtl:space-x-reverse"
               whileHover={{ scale: 1.05 }}
             >
               <Coins className="w-4 h-4 text-yellow-300" />
-              <span className="font-persian">{userStats.aiTokens}</span>
+              <span className="font-persian">{userStats.searches.ai}</span>
             </motion.div>
             <motion.div
-              className="bg-green-500/20 text-green-300 rounded-xl px-3 py-1.5 border border-green-400/30 text-sm font-persian"
+              className="bg-green-500/20 text-green-300 rounded-xl px-3 py-1.5 border border-green-400/30 text-sm font-persian hidden sm:block"
               whileHover={{ scale: 1.05 }}
             >
               {userStats.plan}
@@ -1018,10 +1049,10 @@ const Dashboard = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
         >
-          <h2 className="text-4xl font-bold font-persian mb-2">
+          <h2 className="text-3xl sm:text-4xl font-bold font-persian mb-2">
             خوش آمدید، {user?.name}
           </h2>
-          <p className="text-xl text-blue-200 font-persian">
+          <p className="text-lg sm:text-xl text-blue-200 font-persian">
             با هوش مصنوعی در شبکه‌های اجتماعی جستجو کنید
           </p>
           {error && (
@@ -1038,7 +1069,7 @@ const Dashboard = () => {
 
         <div className="flex justify-center mb-8">
           <motion.div
-            className="bg-white/10 backdrop-blur-lg rounded-2xl p-2 border border-white/20 flex space-x-2 rtl:space-x-reverse"
+            className="bg-white/10 backdrop-blur-lg rounded-2xl p-2 border border-white/20 flex space-x-1 sm:space-x-2 rtl:space-x-reverse"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
@@ -1051,7 +1082,7 @@ const Dashboard = () => {
               <motion.button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`relative px-6 py-3 rounded-xl font-persian font-medium transition-all duration-300 ${
+                className={`relative px-4 sm:px-6 py-3 rounded-xl font-persian font-medium transition-all duration-300 ${
                   activeTab !== tab.id && "hover:bg-white/10"
                 }`}
                 whileHover={{ scale: activeTab === tab.id ? 1 : 1.05 }}
@@ -1064,7 +1095,7 @@ const Dashboard = () => {
                     transition={{ duration: 0.3 }}
                   />
                 )}
-                <span className="relative z-10 flex items-center space-x-2 rtl:space-x-reverse">
+                <span className="relative z-10 flex items-center space-x-2 rtl:space-x-reverse text-sm sm:text-base">
                   <tab.icon className="w-4 h-4" />
                   <span>{tab.label}</span>
                 </span>
@@ -1082,7 +1113,7 @@ const Dashboard = () => {
               exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.3 }}
             >
-              <div className="bg-white/10 backdrop-blur-lg rounded-3xl p-8 border border-white/20">
+              <div className="bg-white/10 backdrop-blur-lg rounded-3xl p-4 sm:p-8 border border-white/20">
                 <div className="relative mb-2">
                   <input
                     type="text"
@@ -1092,7 +1123,7 @@ const Dashboard = () => {
                       e.key === "Enter" && !isSearching && handleSearch()
                     }
                     placeholder="عبارت مورد نظر..."
-                    className="w-full text-lg px-6 py-4 pr-14 bg-white/5 border border-white/20 rounded-2xl placeholder-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400 font-persian text-right transition-all duration-300"
+                    className="w-full text-base sm:text-lg pl-28 sm:pl-32 px-6 py-4 pr-14 bg-white/5 border border-white/20 rounded-2xl placeholder-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400 font-persian text-right transition-all duration-300"
                     disabled={isSearching}
                   />
                   <Search className="absolute right-5 top-1/2 -translate-y-1/2 text-blue-300" />
@@ -1103,7 +1134,7 @@ const Dashboard = () => {
                       selectedPlatforms.length === 0 ||
                       isSearching
                     }
-                    className="absolute left-2 top-1/2 -translate-y-1/2 bg-gradient-to-r from-blue-500 to-purple-600 px-6 py-2 rounded-xl font-persian disabled:opacity-50 transition-all duration-300 flex items-center space-x-2 overflow-hidden"
+                    className="absolute left-2 top-1/2 -translate-y-1/2 bg-gradient-to-r from-blue-500 to-purple-600 px-4 sm:px-6 py-2 rounded-xl font-persian disabled:opacity-50 transition-all duration-300 flex items-center space-x-2 overflow-hidden"
                     whileHover={{
                       scale: isSearching ? 1 : 1.05,
                       backgroundSize: "150% 150%",
@@ -1123,7 +1154,9 @@ const Dashboard = () => {
                             ease: "linear",
                           }}
                         />
-                        <span>در حال جستجو...</span>
+                        <span className="hidden sm:inline">
+                          در حال جستجو...
+                        </span>
                       </>
                     ) : (
                       <span>جستجو</span>
@@ -1133,7 +1166,7 @@ const Dashboard = () => {
 
                 <AnimatePresence>
                   {isSearching && (
-                    <SearchProgressBar
+                    <SearchLoader
                       progress={searchProgress}
                       statusText={searchStatusText}
                     />
@@ -1173,31 +1206,40 @@ const Dashboard = () => {
                     <Globe className="w-5 h-5 text-blue-300" />
                     <span>انتخاب پلتفرم‌ها</span>
                   </label>
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
                     {platforms.map((p) => (
                       <motion.div
                         key={p.id}
-                        onClick={() => handlePlatformToggle(p.id)}
+                        onClick={() =>
+                          !p.disabled && handlePlatformToggle(p.id)
+                        }
                         className={`relative cursor-pointer rounded-2xl p-4 border-2 transition-all duration-300 ${
                           selectedPlatforms.includes(p.id)
                             ? "border-blue-400 bg-blue-500/20 scale-105"
-                            : "border-white/20 bg-white/5 hover:bg-white/10 hover:border-white/30"
+                            : p.disabled
+                              ? "opacity-50 cursor-not-allowed"
+                              : "border-white/20 bg-white/5 hover:bg-white/10 hover:border-white/30"
                         }`}
-                        whileHover={{ y: -5, scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
+                        whileHover={p.disabled ? {} : { y: -5, scale: 1.02 }}
+                        whileTap={p.disabled ? {} : { scale: 0.98 }}
                         layout
                       >
+                        {p.disabled && (
+                          <div className="absolute top-2 right-2 bg-slate-700 text-white text-xs font-bold px-2 py-1 rounded-full font-persian">
+                            به زودی
+                          </div>
+                        )}
                         <div className="flex flex-col items-center text-center">
                           <motion.div
                             className={`w-14 h-14 rounded-xl flex items-center justify-center bg-gradient-to-r ${p.color} mb-3`}
-                            whileHover={{ rotate: 5 }}
+                            whileHover={p.disabled ? {} : { rotate: 5 }}
                           >
                             <p.icon size={28} className="text-white" />
                           </motion.div>
                           <h3 className="font-semibold font-persian text-sm">
                             {p.name}
                           </h3>
-                          <div className="text-xs text-gray-400 mt-1">
+                          <div className="text-xs text-gray-400 mt-1 hidden sm:block">
                             {p.features.slice(0, 2).join("، ")}
                           </div>
                         </div>
@@ -1252,8 +1294,8 @@ const Dashboard = () => {
                   className="bg-white/5 rounded-2xl p-6 border border-white/10"
                   whileHover={{ scale: 1.01 }}
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-4 rtl:space-x-reverse">
+                  <div className="flex flex-col sm:flex-row items-center justify-between">
+                    <div className="flex items-center space-x-4 rtl:space-x-reverse mb-4 sm:mb-0">
                       <motion.div
                         className={`w-14 h-14 rounded-xl flex items-center justify-center transition-all duration-300 ${
                           useAI
@@ -1349,8 +1391,8 @@ const Dashboard = () => {
                     initial={{ opacity: 0, y: -20 }}
                     animate={{ opacity: 1, y: 0 }}
                   >
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center space-x-4 rtl:space-x-reverse">
+                    <div className="flex flex-col sm:flex-row justify-between items-center">
+                      <div className="flex items-center space-x-4 rtl:space-x-reverse mb-4 sm:mb-0">
                         <div className="bg-blue-500/20 p-3 rounded-xl">
                           <BarChart3 className="w-6 h-6 text-blue-300" />
                         </div>
@@ -1646,7 +1688,6 @@ const Dashboard = () => {
               transition={{ duration: 0.3 }}
             >
               <div className="space-y-6">
-                {/* Main Statistics Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                   <motion.div
                     className="bg-gradient-to-r from-blue-500/20 to-cyan-600/20 rounded-2xl p-6 border border-blue-400/30"
@@ -1672,7 +1713,7 @@ const Dashboard = () => {
                       {analyticsData.totalSearches}
                     </p>
                     <div className="text-xs text-gray-400 font-persian">
-                      از {50} جستجوی مجاز
+                      در این نشست
                     </div>
                   </motion.div>
 
@@ -1694,13 +1735,13 @@ const Dashboard = () => {
                       </motion.div>
                     </div>
                     <h3 className="font-persian text-gray-300 text-sm mb-1">
-                      توکن‌های مصرفی
+                      توکن‌های باقی‌مانده
                     </h3>
                     <p className="text-3xl font-bold text-purple-400 mb-2">
-                      {1000 - userStats.aiTokens}
+                      {userStats.searches.ai}
                     </p>
                     <div className="text-xs text-gray-400 font-persian">
-                      از {1000} توکن
+                      از 10000 توکن
                     </div>
                   </motion.div>
 
@@ -1761,9 +1802,7 @@ const Dashboard = () => {
                   </motion.div>
                 </div>
 
-                {/* Charts and Advanced Analytics */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {/* Platform Usage Chart */}
                   <motion.div
                     className="bg-white/10 rounded-2xl p-6 border border-white/20"
                     initial={{ opacity: 0, x: -50 }}
@@ -1809,7 +1848,6 @@ const Dashboard = () => {
                     </div>
                   </motion.div>
 
-                  {/* Sentiment Analysis */}
                   <motion.div
                     className="bg-white/10 rounded-2xl p-6 border border-white/20"
                     initial={{ opacity: 0, x: 50 }}
@@ -1877,7 +1915,6 @@ const Dashboard = () => {
                   </motion.div>
                 </div>
 
-                {/* Search History */}
                 <motion.div
                   className="bg-white/10 rounded-2xl p-6 border border-white/20"
                   initial={{ opacity: 0, y: 50 }}
@@ -1956,91 +1993,11 @@ const Dashboard = () => {
                     )}
                   </div>
                 </motion.div>
-
-                {/* Performance Metrics */}
-                <motion.div
-                  className="bg-gradient-to-r from-indigo-500/10 to-purple-500/10 rounded-2xl p-6 border border-indigo-400/20"
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: 0.5 }}
-                >
-                  <h3 className="text-lg font-semibold font-persian mb-4 flex items-center space-x-2 rtl:space-x-reverse">
-                    <Award className="w-5 h-5 text-indigo-400" />
-                    <span>عملکرد کلی</span>
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <motion.div
-                      className="text-center"
-                      whileHover={{ scale: 1.05 }}
-                    >
-                      <div className="bg-indigo-500/20 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3">
-                        <Flame className="w-8 h-8 text-indigo-400" />
-                      </div>
-                      <h4 className="font-persian font-semibold text-lg">
-                        امتیاز کیفیت
-                      </h4>
-                      <p className="text-2xl font-bold text-indigo-400 mb-1">
-                        {Math.min(95, 60 + analyticsData.totalSearches * 2)}%
-                      </p>
-                      <p className="text-xs text-gray-400 font-persian">
-                        بر اساس تنوع جستجو
-                      </p>
-                    </motion.div>
-
-                    <motion.div
-                      className="text-center"
-                      whileHover={{ scale: 1.05 }}
-                    >
-                      <div className="bg-purple-500/20 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3">
-                        <Users className="w-8 h-8 text-purple-400" />
-                      </div>
-                      <h4 className="font-persian font-semibold text-lg">
-                        پوشش شبکه‌ها
-                      </h4>
-                      <p className="text-2xl font-bold text-purple-400 mb-1">
-                        {Math.min(
-                          6,
-                          Object.keys(analyticsData.platformStats).filter(
-                            (key) => analyticsData.platformStats[key] > 0
-                          ).length
-                        )}
-                      </p>
-                      <p className="text-xs text-gray-400 font-persian">
-                        از 6 پلتفرم موجود
-                      </p>
-                    </motion.div>
-
-                    <motion.div
-                      className="text-center"
-                      whileHover={{ scale: 1.05 }}
-                    >
-                      <div className="bg-pink-500/20 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3">
-                        <Star className="w-8 h-8 text-pink-400" />
-                      </div>
-                      <h4 className="font-persian font-semibold text-lg">
-                        رتبه کاربری
-                      </h4>
-                      <p className="text-2xl font-bold text-pink-400 mb-1">
-                        {analyticsData.totalSearches < 5
-                          ? "مبتدی"
-                          : analyticsData.totalSearches < 15
-                            ? "متوسط"
-                            : analyticsData.totalSearches < 30
-                              ? "پیشرفته"
-                              : "حرفه‌ای"}
-                      </p>
-                      <p className="text-xs text-gray-400 font-persian">
-                        بر اساس فعالیت
-                      </p>
-                    </motion.div>
-                  </div>
-                </motion.div>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
       </main>
-      {/* --- NEW: License Footer --- */}
       <footer className="text-center p-4 text-xs text-slate-400 font-persian">
         Developed by Mehrshad Hamavandy | © 2025 Kavosh Search Platform. All
         Rights Reserved.

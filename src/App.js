@@ -55,6 +55,8 @@ import {
   ThumbsUp,
   ThumbsDown,
   Minus,
+  History,
+  Info,
 } from "lucide-react";
 
 // Firebase Configuration
@@ -113,9 +115,9 @@ const AuthProvider = ({ children }) => {
           const newUser = {
             name: firebaseUser.displayName || "کاربر جدید",
             email: firebaseUser.email,
-            plan: "Free",
-            searches: 50,
-            aiTokens: 1000,
+            plan: "Premium",
+            searches: 500,
+            aiTokens: 10000,
             createdAt: new Date().toISOString(),
           };
           await setDoc(userDocRef, newUser);
@@ -126,6 +128,7 @@ const AuthProvider = ({ children }) => {
       }
       setLoading(false);
     });
+
     return unsubscribe;
   }, []);
 
@@ -133,9 +136,8 @@ const AuthProvider = ({ children }) => {
     return signInWithEmailAndPassword(auth, email, password);
   };
 
-  const loginWithGoogle = async () => {
-    const result = await signInWithPopup(auth, googleProvider);
-    return result;
+  const loginWithGoogle = () => {
+    return signInWithPopup(auth, googleProvider);
   };
 
   const logout = () => signOut(auth);
@@ -165,6 +167,88 @@ const LoadingSpinner = () => (
       />
     </motion.div>
   </div>
+);
+
+// --- NEW: Animatic Progress Bar Component ---
+const SearchProgressBar = ({ progress, statusText }) => (
+  <motion.div
+    className="w-full bg-white/10 rounded-full h-6 my-4 border border-white/20 relative overflow-hidden"
+    initial={{ opacity: 0, y: -10 }}
+    animate={{ opacity: 1, y: 0 }}
+    exit={{ opacity: 0, y: -10 }}
+  >
+    <motion.div
+      className="absolute top-0 left-0 h-full bg-gradient-to-r from-blue-500 to-purple-600"
+      initial={{ width: "0%" }}
+      animate={{ width: `${progress}%` }}
+      transition={{ duration: 0.5, ease: "easeInOut" }}
+    />
+    <motion.div
+      className="absolute top-0 left-0 h-full w-full bg-repeat-x opacity-20"
+      style={{
+        backgroundImage:
+          "linear-gradient(45deg, rgba(255,255,255,0.15) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0.15) 75%, transparent 75%, transparent)",
+        backgroundSize: "40px 40px",
+      }}
+      animate={{ backgroundPositionX: ["0px", "40px"] }}
+      transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+    />
+    <div className="absolute inset-0 flex items-center justify-center">
+      <p className="text-sm font-bold text-white font-persian text-shadow">
+        {statusText}
+      </p>
+    </div>
+  </motion.div>
+);
+
+// --- NEW: Animatic Alert Component ---
+const AnimaticAlert = ({ message, icon, color, onConfirm, onCancel }) => (
+  <motion.div
+    className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+    exit={{ opacity: 0 }}
+  >
+    <motion.div
+      className="bg-slate-800/80 border border-white/20 rounded-2xl p-6 text-center max-w-sm w-full"
+      initial={{ scale: 0.8, y: 20 }}
+      animate={{ scale: 1, y: 0 }}
+      transition={{ type: "spring", stiffness: 300, damping: 20 }}
+    >
+      <motion.div
+        className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 border-4 ${color}-border`}
+        initial={{ scale: 0 }}
+        animate={{ scale: [0, 1.2, 1] }}
+        transition={{ duration: 0.5, delay: 0.1 }}
+      >
+        {React.createElement(icon, { className: `w-8 h-8 ${color}-text` })}
+      </motion.div>
+      <p className="text-white font-persian text-lg mb-6">{message}</p>
+      <div className="flex justify-center space-x-4 rtl:space-x-reverse">
+        {onCancel && (
+          <motion.button
+            onClick={onCancel}
+            className="px-6 py-2 bg-white/10 text-white rounded-lg font-persian"
+            whileHover={{
+              scale: 1.05,
+              backgroundColor: "rgba(255,255,255,0.2)",
+            }}
+            whileTap={{ scale: 0.95 }}
+          >
+            لغو
+          </motion.button>
+        )}
+        <motion.button
+          onClick={onConfirm}
+          className={`px-6 py-2 ${color}-bg text-white rounded-lg font-persian`}
+          whileHover={{ scale: 1.05, filter: "brightness(1.1)" }}
+          whileTap={{ scale: 0.95 }}
+        >
+          تایید
+        </motion.button>
+      </div>
+    </motion.div>
+  </motion.div>
 );
 
 const CustomDropdown = ({
@@ -430,19 +514,44 @@ const Dashboard = () => {
   const [aiProvider, setAiProvider] = useState("openai");
   const [aiInsight, setAiInsight] = useState("");
   const [connectionStatus, setConnectionStatus] = useState("checking");
+
   const [userStats, setUserStats] = useState({
-    searches: user?.searches || 50,
-    aiTokens: user?.aiTokens || 1000,
-    plan: user?.plan || "Free",
+    plan: user?.plan || "Premium",
+    aiTokens: user?.aiTokens || 10000,
+    twitterSearches: user?.twitterSearches || 200,
+    instagramSearches: user?.instagramSearches || 150,
+    otherSearches: user?.otherSearches || 150,
   });
+
   const [error, setError] = useState("");
   const [searchHistory, setSearchHistory] = useState([]);
+  const [recentSearches, setRecentSearches] = useState([]);
+  const [searchProgress, setSearchProgress] = useState(0);
+  const [searchStatusText, setSearchStatusText] = useState("");
+
+  // --- NEW: State for showing alerts ---
+  const [alertInfo, setAlertInfo] = useState(null);
+
+  const handleLogoutClick = () => {
+    setAlertInfo({
+      message: "آیا برای خروج از حساب کاربری خود اطمینان دارید؟",
+      icon: LogOut,
+      color: "red",
+      onConfirm: () => {
+        logout();
+        setAlertInfo(null);
+      },
+      onCancel: () => setAlertInfo(null),
+    });
+  };
 
   useEffect(() => {
     setUserStats({
-      searches: user?.searches || 50,
-      aiTokens: user?.aiTokens || 1000,
-      plan: user?.plan || "Free",
+      plan: user?.plan || "Premium",
+      aiTokens: user?.aiTokens || 10000,
+      twitterSearches: user?.twitterSearches || 200,
+      instagramSearches: user?.instagramSearches || 150,
+      otherSearches: user?.otherSearches || 150,
     });
     checkBackendConnection();
   }, [user]);
@@ -540,15 +649,6 @@ const Dashboard = () => {
     );
   };
 
-  /**
-   * FIX: This function was the primary cause of the results not showing.
-   * The backend nests each platform's results inside a `data` object,
-   * e.g., `platformData.data.results`. The original code was looking for
-   * `platformData.results`, which is undefined, causing it to skip all results.
-   *
-   * I've corrected the logic to look for `platformData.data.results` and also
-   * made the engagement metrics parsing more robust to match Twitter API v2 fields.
-   */
   const transformApiResults = (apiResults) => {
     const allResults = [];
     console.log("Transforming API results:", apiResults);
@@ -558,13 +658,11 @@ const Dashboard = () => {
         ([platform, platformData]) => {
           console.log(`Processing ${platform}:`, platformData);
 
-          // CORRECTED CHECK: Look inside `platformData.data` for the `results` array.
           if (
             platformData.success &&
             platformData.data &&
             Array.isArray(platformData.data.results)
           ) {
-            // CORRECTED ITERATION: Loop over `platformData.data.results`.
             platformData.data.results.forEach((item) => {
               try {
                 const transformedItem = {
@@ -581,7 +679,6 @@ const Dashboard = () => {
                     item.created_at || item.date || Date.now()
                   ).toLocaleDateString("fa-IR"),
                   engagement: {
-                    // IMPROVED METRICS: Prioritize Twitter API v2 fields
                     likes:
                       item.metrics?.like_count ||
                       item.metrics?.likes ||
@@ -632,14 +729,9 @@ const Dashboard = () => {
     return allResults;
   };
 
-  const handleSearch = async () => {
-    if (!searchQuery.trim() || selectedPlatforms.length === 0) {
+  const handleSearch = async (query = searchQuery) => {
+    if (!query.trim() || selectedPlatforms.length === 0) {
       setError("لطفاً عبارت جستجو و حداقل یک پلتفرم را انتخاب کنید.");
-      return;
-    }
-
-    if (userStats.searches <= 0) {
-      setError("تعداد جستجوهای شما به پایان رسیده است.");
       return;
     }
 
@@ -648,69 +740,75 @@ const Dashboard = () => {
     setLoadedResults(10);
     setAiInsight("");
     setError("");
-    setSearchResults([]); // Clear previous results
+    setSearchResults([]);
+
+    setSearchProgress(10);
+    setSearchStatusText("در حال برقراری ارتباط...");
 
     try {
-      console.log(
-        "Starting search with query:",
-        searchQuery,
-        "platforms:",
-        selectedPlatforms
+      setRecentSearches((prev) =>
+        [query, ...prev.filter((q) => q !== query)].slice(0, 5)
+      );
+
+      setSearchProgress(30);
+      setSearchStatusText(
+        `در حال جستجو در ${selectedPlatforms.length} پلتفرم...`
       );
 
       let searchResult;
 
-      if (useAI && userStats.aiTokens > 100) {
-        console.log("Using AI-enhanced search");
+      if (useAI) {
         searchResult = await apiService.searchWithAI(
-          searchQuery,
+          query,
           selectedPlatforms,
           20,
           aiProvider
         );
+        setSearchProgress(70);
+        setSearchStatusText("در حال تحلیل نتایج با هوش مصنوعی...");
 
         if (searchResult.success && searchResult.aiAnalysis) {
-          const aiAnalysisText =
-            typeof searchResult.aiAnalysis === "string"
-              ? searchResult.aiAnalysis
-              : typeof searchResult.aiAnalysis === "object"
-                ? searchResult.aiAnalysis.summary ||
-                  searchResult.aiAnalysis.analysis ||
-                  JSON.stringify(searchResult.aiAnalysis, null, 2)
-                : "تحلیل هوش مصنوعی دریافت شد اما قابل نمایش نیست";
-
-          setAiInsight(aiAnalysisText);
+          setAiInsight(searchResult.aiAnalysis);
           setUserStats((prev) => ({ ...prev, aiTokens: prev.aiTokens - 100 }));
         }
       } else {
-        console.log("Using regular multi-platform search");
         searchResult = await apiService.searchMultiple(
-          searchQuery,
+          query,
           selectedPlatforms,
           20
         );
       }
 
-      console.log("Raw search result from API:", searchResult);
+      setSearchProgress(90);
+      setSearchStatusText("در حال آماده‌سازی نتایج...");
 
       if (searchResult.success && searchResult.data) {
         const transformedResults = transformApiResults(searchResult.data);
-        console.log("Successfully transformed results:", transformedResults);
-
         if (transformedResults.length > 0) {
           setSearchResults(transformedResults);
-
-          // Add to search history
           const newSearch = {
             id: Date.now(),
-            query: searchQuery,
+            query: query,
             platforms: selectedPlatforms,
             timestamp: new Date().toISOString(),
             resultsCount: transformedResults.length,
           };
           setSearchHistory((prev) => [newSearch, ...prev.slice(0, 9)]);
 
-          setUserStats((prev) => ({ ...prev, searches: prev.searches - 1 }));
+          setUserStats((prev) => {
+            const newStats = { ...prev };
+            if (selectedPlatforms.includes("twitter"))
+              newStats.twitterSearches--;
+            if (selectedPlatforms.includes("instagram"))
+              newStats.instagramSearches--;
+            if (
+              selectedPlatforms.some(
+                (p) => !["twitter", "instagram"].includes(p)
+              )
+            )
+              newStats.otherSearches--;
+            return newStats;
+          });
         } else {
           setError(
             "هیچ نتیجه‌ای یافت نشد. لطفاً عبارت جستجوی دیگری امتحان کنید."
@@ -719,37 +817,22 @@ const Dashboard = () => {
       } else {
         throw new Error(searchResult.error || "جستجو ناموفق بود");
       }
+      setSearchProgress(100);
+      setSearchStatusText("جستجو کامل شد!");
     } catch (error) {
       console.error("Search failed:", error);
       setError(`خطا در جستجو: ${error.message}`);
-
-      // Enhanced fallback with better mock data
-      console.log("Creating enhanced mock data as fallback");
-      const mockResults = Array.from({ length: 8 }, (_, i) => ({
-        id: `mock_${Date.now()}_${i}`,
-        platform: selectedPlatforms[i % selectedPlatforms.length] || "twitter",
-        content: `نتیجه آزمایشی ${i + 1} برای "${searchQuery}". این محتوای نمونه است که نشان دهنده نحوه نمایش نتایج جستجو می‌باشد. در حالت عادی، اطلاعات واقعی از شبکه‌های اجتماعی نمایش داده می‌شود.`,
-        author: `کاربر_${i + 1}`,
-        date: new Date(Date.now() - i * 3600000).toLocaleDateString("fa-IR"),
-        engagement: {
-          likes: Math.floor(Math.random() * 1000) + 50,
-          comments: Math.floor(Math.random() * 100) + 5,
-          shares: Math.floor(Math.random() * 50) + 2,
-          views: Math.floor(Math.random() * 5000) + 100,
-        },
-        sentiment: ["positive", "neutral", "negative"][
-          Math.floor(Math.random() * 3)
-        ],
-        media: i % 3 === 0 ? `https://picsum.photos/400/300?random=${i}` : null,
-        originalUrl: "#",
-        mediaType: i % 4 === 0 ? "video" : i % 3 === 0 ? "image" : "text",
-      }));
-
-      setSearchResults(mockResults);
-      setError("نتایج آزمایشی نمایش داده شده است - اتصال به سرور برقرار نشد");
     } finally {
-      setIsSearching(false);
+      setTimeout(() => {
+        setIsSearching(false);
+        setSearchProgress(0);
+      }, 1500);
     }
+  };
+
+  const runRecentSearch = (query) => {
+    setSearchQuery(query);
+    handleSearch(query);
   };
 
   const loadMoreResults = () => {
@@ -819,7 +902,6 @@ const Dashboard = () => {
     const totalResults = searchResults.length;
     const platformStats = {};
 
-    // Calculate platform usage
     platforms.forEach((platform) => {
       platformStats[platform.id] = searchResults.filter(
         (r) => r.platform === platform.id
@@ -856,7 +938,18 @@ const Dashboard = () => {
   const analyticsData = getAnalyticsData();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white flex flex-col">
+      <AnimatePresence>
+        {alertInfo && (
+          <AnimaticAlert
+            message={alertInfo.message}
+            icon={alertInfo.icon}
+            color={alertInfo.color}
+            onConfirm={alertInfo.onConfirm}
+            onCancel={alertInfo.onCancel}
+          />
+        )}
+      </AnimatePresence>
       <motion.header
         className="bg-black/20 backdrop-blur-lg border-b border-white/10 sticky top-0 z-40"
         initial={{ y: -100 }}
@@ -878,51 +971,28 @@ const Dashboard = () => {
           </div>
           <div className="flex items-center space-x-2 rtl:space-x-reverse">
             <motion.div
-              title={`وضعیت سرور: ${connectionStatus}`}
-              className={`p-2 rounded-full transition-all duration-300 ${
-                connectionStatus === "connected"
-                  ? "bg-green-500/20"
-                  : connectionStatus === "checking"
-                    ? "bg-yellow-500/20"
-                    : "bg-red-500/20"
-              }`}
-              whileHover={{ scale: 1.1 }}
+              className="bg-white/10 rounded-xl px-3 py-1.5 border border-white/20 text-sm flex items-center space-x-2 rtl:space-x-reverse"
+              whileHover={{ scale: 1.05 }}
             >
-              <motion.div
-                className={`w-3 h-3 rounded-full transition-all duration-300 ${
-                  connectionStatus === "connected"
-                    ? "bg-green-400"
-                    : connectionStatus === "checking"
-                      ? "bg-yellow-400"
-                      : "bg-red-400"
-                }`}
-                animate={
-                  connectionStatus === "checking"
-                    ? { opacity: [1, 0.5, 1] }
-                    : {}
-                }
-                transition={{
-                  repeat: connectionStatus === "checking" ? Infinity : 0,
-                  duration: 1,
-                }}
-              />
+              <Twitter size={14} className="text-blue-400" />
+              <span className="font-persian">{userStats.twitterSearches}</span>
             </motion.div>
             <motion.div
               className="bg-white/10 rounded-xl px-3 py-1.5 border border-white/20 text-sm flex items-center space-x-2 rtl:space-x-reverse"
               whileHover={{ scale: 1.05 }}
             >
-              <Search className="w-4 h-4 text-blue-300" />
-              <span className="font-persian">{userStats.searches}</span>
+              <Instagram size={14} className="text-pink-400" />
+              <span className="font-persian">
+                {userStats.instagramSearches}
+              </span>
             </motion.div>
-            {useAI && (
-              <motion.div
-                className="bg-white/10 rounded-xl px-3 py-1.5 border border-white/20 text-sm flex items-center space-x-2 rtl:space-x-reverse"
-                whileHover={{ scale: 1.05 }}
-              >
-                <Coins className="w-4 h-4 text-yellow-300" />
-                <span className="font-persian">{userStats.aiTokens}</span>
-              </motion.div>
-            )}
+            <motion.div
+              className="bg-white/10 rounded-xl px-3 py-1.5 border border-white/20 text-sm flex items-center space-x-2 rtl:space-x-reverse"
+              whileHover={{ scale: 1.05 }}
+            >
+              <Coins className="w-4 h-4 text-yellow-300" />
+              <span className="font-persian">{userStats.aiTokens}</span>
+            </motion.div>
             <motion.div
               className="bg-green-500/20 text-green-300 rounded-xl px-3 py-1.5 border border-green-400/30 text-sm font-persian"
               whileHover={{ scale: 1.05 }}
@@ -930,7 +1000,7 @@ const Dashboard = () => {
               {userStats.plan}
             </motion.div>
             <motion.button
-              onClick={logout}
+              onClick={handleLogoutClick}
               className="p-2 text-red-400 hover:bg-white/10 rounded-xl transition-all duration-200"
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.9 }}
@@ -941,7 +1011,7 @@ const Dashboard = () => {
         </div>
       </motion.header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full">
         <motion.div
           className="text-center mb-12"
           initial={{ opacity: 0, y: 20 }}
@@ -1013,7 +1083,7 @@ const Dashboard = () => {
               transition={{ duration: 0.3 }}
             >
               <div className="bg-white/10 backdrop-blur-lg rounded-3xl p-8 border border-white/20">
-                <div className="relative mb-6">
+                <div className="relative mb-2">
                   <input
                     type="text"
                     value={searchQuery}
@@ -1027,15 +1097,20 @@ const Dashboard = () => {
                   />
                   <Search className="absolute right-5 top-1/2 -translate-y-1/2 text-blue-300" />
                   <motion.button
-                    onClick={handleSearch}
+                    onClick={() => handleSearch()}
                     disabled={
                       !searchQuery ||
                       selectedPlatforms.length === 0 ||
                       isSearching
                     }
-                    className="absolute left-2 top-1/2 -translate-y-1/2 bg-gradient-to-r from-blue-500 to-purple-600 px-6 py-2 rounded-xl font-persian disabled:opacity-50 transition-all duration-300 flex items-center space-x-2"
-                    whileHover={{ scale: isSearching ? 1 : 1.05 }}
+                    className="absolute left-2 top-1/2 -translate-y-1/2 bg-gradient-to-r from-blue-500 to-purple-600 px-6 py-2 rounded-xl font-persian disabled:opacity-50 transition-all duration-300 flex items-center space-x-2 overflow-hidden"
+                    whileHover={{
+                      scale: isSearching ? 1 : 1.05,
+                      backgroundSize: "150% 150%",
+                    }}
                     whileTap={{ scale: isSearching ? 1 : 0.95 }}
+                    style={{ backgroundSize: "100% 100%" }}
+                    transition={{ duration: 0.3 }}
                   >
                     {isSearching ? (
                       <>
@@ -1055,6 +1130,43 @@ const Dashboard = () => {
                     )}
                   </motion.button>
                 </div>
+
+                <AnimatePresence>
+                  {isSearching && (
+                    <SearchProgressBar
+                      progress={searchProgress}
+                      statusText={searchStatusText}
+                    />
+                  )}
+                </AnimatePresence>
+
+                {recentSearches.length > 0 && (
+                  <motion.div
+                    className="mt-4 mb-6"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                  >
+                    <div className="flex items-center space-x-2 rtl:space-x-reverse text-sm text-blue-200 mb-2">
+                      <History size={16} />
+                      <span className="font-semibold font-persian">
+                        جستجوهای اخیر:
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {recentSearches.map((term) => (
+                        <motion.button
+                          key={term}
+                          onClick={() => runRecentSearch(term)}
+                          className="px-3 py-1 bg-white/10 rounded-lg text-sm font-persian hover:bg-white/20 transition-colors"
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                        >
+                          {term}
+                        </motion.button>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
 
                 <div className="mb-6">
                   <label className="block text-lg font-semibold mb-4 font-persian flex items-center space-x-2 rtl:space-x-reverse">
@@ -1197,30 +1309,23 @@ const Dashboard = () => {
                       </AnimatePresence>
                       <motion.button
                         onClick={() => setUseAI(!useAI)}
-                        className={`relative w-16 h-8 rounded-full transition-all duration-300 ${
+                        className={`relative w-16 h-8 rounded-full transition-all duration-300 flex items-center ${
                           useAI
-                            ? "bg-gradient-to-r from-blue-500 to-purple-600"
-                            : "bg-white/20"
+                            ? "justify-end bg-gradient-to-r from-blue-500 to-purple-600"
+                            : "justify-start bg-white/20"
                         }`}
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
                       >
                         <motion.div
-                          className="w-6 h-6 bg-white rounded-full absolute top-1 shadow-lg"
-                          animate={{ x: useAI ? 32 : 4 }}
+                          layout
+                          className="w-6 h-6 bg-white rounded-full shadow-lg mx-1"
                           transition={{
-                            duration: 0.3,
                             type: "spring",
-                            stiffness: 300,
+                            stiffness: 700,
+                            damping: 30,
                           }}
                         />
-                        {useAI && (
-                          <motion.div
-                            className="absolute inset-0 bg-gradient-to-r from-purple-400 to-pink-400 rounded-full opacity-30"
-                            animate={{ scale: [1, 1.2, 1] }}
-                            transition={{ duration: 1, repeat: Infinity }}
-                          />
-                        )}
                       </motion.button>
                     </div>
                   </div>
@@ -1935,6 +2040,11 @@ const Dashboard = () => {
           )}
         </AnimatePresence>
       </main>
+      {/* --- NEW: License Footer --- */}
+      <footer className="text-center p-4 text-xs text-slate-400 font-persian">
+        Developed by Mehrshad Hamavandy | © 2025 Kavosh Search Platform. All
+        Rights Reserved.
+      </footer>
     </div>
   );
 };

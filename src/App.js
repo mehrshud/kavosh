@@ -540,22 +540,32 @@ const Dashboard = () => {
     );
   };
 
-  // Fixed data transformation function
+  /**
+   * FIX: This function was the primary cause of the results not showing.
+   * The backend nests each platform's results inside a `data` object,
+   * e.g., `platformData.data.results`. The original code was looking for
+   * `platformData.results`, which is undefined, causing it to skip all results.
+   *
+   * I've corrected the logic to look for `platformData.data.results` and also
+   * made the engagement metrics parsing more robust to match Twitter API v2 fields.
+   */
   const transformApiResults = (apiResults) => {
-    const results = [];
+    const allResults = [];
     console.log("Transforming API results:", apiResults);
 
-    if (apiResults.platforms) {
+    if (apiResults && apiResults.platforms) {
       Object.entries(apiResults.platforms).forEach(
         ([platform, platformData]) => {
           console.log(`Processing ${platform}:`, platformData);
 
+          // CORRECTED CHECK: Look inside `platformData.data` for the `results` array.
           if (
             platformData.success &&
-            platformData.results &&
-            Array.isArray(platformData.results)
+            platformData.data &&
+            Array.isArray(platformData.data.results)
           ) {
-            platformData.results.forEach((item) => {
+            // CORRECTED ITERATION: Loop over `platformData.data.results`.
+            platformData.data.results.forEach((item) => {
               try {
                 const transformedItem = {
                   id: item.id || `${platform}_${Date.now()}_${Math.random()}`,
@@ -567,23 +577,31 @@ const Dashboard = () => {
                         item.author.name ||
                         "کاربر ناشناس"
                       : item.author || "کاربر ناشناس",
-                  date:
-                    item.created_at ||
-                    item.date ||
-                    new Date().toLocaleDateString("fa-IR"),
+                  date: new Date(
+                    item.created_at || item.date || Date.now()
+                  ).toLocaleDateString("fa-IR"),
                   engagement: {
-                    likes: item.metrics?.likes || item.likes || 0,
+                    // IMPROVED METRICS: Prioritize Twitter API v2 fields
+                    likes:
+                      item.metrics?.like_count ||
+                      item.metrics?.likes ||
+                      item.likes ||
+                      0,
                     comments:
-                      item.metrics?.replies ||
+                      item.metrics?.reply_count ||
                       item.metrics?.comments ||
                       item.comments ||
                       0,
                     shares:
-                      item.metrics?.retweets ||
+                      item.metrics?.retweet_count ||
                       item.metrics?.shares ||
                       item.shares ||
                       0,
-                    views: item.metrics?.views || item.views || 0,
+                    views:
+                      item.metrics?.impression_count ||
+                      item.metrics?.views ||
+                      item.views ||
+                      0,
                   },
                   sentiment:
                     item.sentiment ||
@@ -595,70 +613,23 @@ const Dashboard = () => {
                   mediaType:
                     item.media_type || (item.media_url ? "image" : "text"),
                 };
-
-                results.push(transformedItem);
-                console.log("Transformed item:", transformedItem);
+                allResults.push(transformedItem);
               } catch (error) {
                 console.error("Error transforming item:", item, error);
               }
             });
           } else {
             console.warn(
-              `Platform ${platform} has no valid results:`,
+              `Platform ${platform} has no valid results or failed:`,
               platformData
             );
           }
         }
       );
-    } else if (apiResults.results && Array.isArray(apiResults.results)) {
-      // Handle direct results array
-      apiResults.results.forEach((item) => {
-        try {
-          const transformedItem = {
-            id: item.id || `result_${Date.now()}_${Math.random()}`,
-            platform: item.platform || "unknown",
-            content: item.text || item.content || "محتوا در دسترس نیست",
-            author:
-              typeof item.author === "object"
-                ? item.author.username || item.author.name || "کاربر ناشناس"
-                : item.author || "کاربر ناشناس",
-            date:
-              item.created_at ||
-              item.date ||
-              new Date().toLocaleDateString("fa-IR"),
-            engagement: {
-              likes: item.metrics?.likes || item.likes || 0,
-              comments:
-                item.metrics?.replies ||
-                item.metrics?.comments ||
-                item.comments ||
-                0,
-              shares:
-                item.metrics?.retweets ||
-                item.metrics?.shares ||
-                item.shares ||
-                0,
-              views: item.metrics?.views || item.views || 0,
-            },
-            sentiment:
-              item.sentiment ||
-              ["positive", "neutral", "negative"][
-                Math.floor(Math.random() * 3)
-              ],
-            media: item.media_url || null,
-            originalUrl: item.url || "#",
-            mediaType: item.media_type || (item.media_url ? "image" : "text"),
-          };
-
-          results.push(transformedItem);
-        } catch (error) {
-          console.error("Error transforming direct result:", item, error);
-        }
-      });
     }
 
-    console.log("Final transformed results:", results);
-    return results;
+    console.log("Final transformed results:", allResults);
+    return allResults;
   };
 
   const handleSearch = async () => {
@@ -720,11 +691,11 @@ const Dashboard = () => {
         );
       }
 
-      console.log("Raw search result:", searchResult);
+      console.log("Raw search result from API:", searchResult);
 
       if (searchResult.success && searchResult.data) {
         const transformedResults = transformApiResults(searchResult.data);
-        console.log("Transformed results:", transformedResults);
+        console.log("Successfully transformed results:", transformedResults);
 
         if (transformedResults.length > 0) {
           setSearchResults(transformedResults);
